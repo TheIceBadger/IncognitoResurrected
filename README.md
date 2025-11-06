@@ -45,7 +45,6 @@ New languages are always appreciated. Please submit a ticket with those if you w
 ## Credits
 Original Author: Nyyr  
 Resurrected Author: Starlynk  
-Collaborator: TheIceBadger  
-Contributors: Hubbotu  
+Contributors: TheIceBadger, Hubbotu  
 ##  
 ### Version: 1.4.0
