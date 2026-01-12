@@ -9,7 +9,7 @@
 
 ## X-Curse-Project-ID: 961634
 
-## Interface-Classic: 11508, 20505
+## Interface-Classic: 11508
 ## Interface-Mists: 50503
 
 #@no-lib-strip@
@@ -22,4 +22,5 @@ IncognitoResurrected_ruRU.lua
 IncognitoResurrected_esES.lua
 
 IncognitoResurrected.lua
+
 
