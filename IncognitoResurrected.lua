@@ -1,4 +1,4 @@
---  Version: 1.4.3
+--  Version: 1.4.4
 IncognitoResurrected = LibStub("AceAddon-3.0"):NewAddon("IncognitoResurrected",
                                                         "AceConsole-3.0",
                                                         "AceEvent-3.0",
@@ -261,7 +261,14 @@ local SlashOptions = {
             guiHidden = true,
             type = "execute",
             func = function()
-                InterfaceOptionsFrame_OpenToCategory(IncognitoResurrected)
+                -- Open settings using the modern approach or fallback to old method
+                if Settings and Settings.OpenToCategory then
+                    Settings.OpenToCategory(
+                        IncognitoResurrected.optionFrames.main.name)
+                elseif InterfaceOptionsFrame_OpenToCategory then
+                    InterfaceOptionsFrame_OpenToCategory(
+                        IncognitoResurrected.optionFrames.main)
+                end
             end
         }
     }
@@ -286,185 +293,165 @@ function IncognitoResurrected:OnInitialize()
         profiles = dialog:AddToBlizOptions("IncognitoResurrected Profiles",
                                            "Profiles", "IncognitoResurrected")
     }
-    -- Hook SendChatMessage function using feature detection
-    self._useCChatInfo = type(C_ChatInfo) == "table" and
-                             type(C_ChatInfo.SendChatMessage) == "function"
-    self._useCClubInfo = type(C_Club) == "table" and type(C_Club.SendMessage) ==
-                             "function"
-    if self._useCChatInfo then
-        self:RawHook(C_ChatInfo, "SendChatMessage", true)
+    -- Hook editBox SendText methods instead of global function (modern WoW)
+    for i = 1, NUM_CHAT_WINDOWS do
+        local editBox = _G["ChatFrame" .. i .. "EditBox"]
+        if editBox then
+            self:RawHook(editBox, "SendText", "ChatEdit_SendText", true)
+        end
     end
-    if self._useCClubInfo then self:RawHook(C_Club, "SendMessage", true) end
-    if not self._useCChatInfo then self:RawHook("SendChatMessage", true) end
+
     -- get current character name
     character_name, _ = UnitName("player")
     self:Safe_Print(L["Loaded"])
 end
 --  Event Handlers
-function IncognitoResurrected:SendChatMessage(msg, chatType, language, target)
+function IncognitoResurrected:ChatEdit_SendText(editBox, addToHistory)
+    local text = editBox:GetText()
+
+    -- Don't process empty text
+    if not text or text == "" then
+        self.hooks[editBox].SendText(editBox, addToHistory)
+        return
+    end
+
+    -- Compatibility: GetAttribute may not exist in all versions, fallback to direct property access
+    local chatType =
+        (editBox.GetAttribute and editBox:GetAttribute("chatType")) or
+            editBox.chatType
+    local chatTarget = (editBox.GetAttribute and
+                           editBox:GetAttribute("tellTarget")) or
+                           editBox.tellTarget
+
+    self:Safe_Print(
+        "Hook called - Type: " .. tostring(chatType) .. ", Target: " ..
+            tostring(chatTarget) .. ", Text: " .. text)
+
     -- Early out: ignore messages starting with configured symbols (after spaces)
-    if self.db and self.db.profile and self.db.profile.enable and type(msg) ==
+    if self.db and self.db.profile and self.db.profile.enable and type(text) ==
         "string" then
-        local symbols = self.db.profile.ignoreLeadingSymbols or "/!#"
-        local firstChar = msg:match("^%s*(.)")
+        local symbols = self.db.profile.ignoreLeadingSymbols or "/!#@?"
+        local firstChar = text:match("^%s*(.)")
         if firstChar and symbols:find(firstChar, 1, true) then
-            if self._useCChatInfo then
-                self.hooks[C_ChatInfo].SendChatMessage(msg, chatType, language,
-                                                       target)
-            else
-                self.hooks.SendChatMessage(msg, chatType, language, target)
-            end
+            self:Safe_Print("Skipping due to leading symbol: " .. firstChar)
+            self.hooks[editBox].SendText(editBox, addToHistory)
             return
         end
     end
-    if self.db.profile.enable and self.db.profile.community and chatType ==
-        "CHANNEL" then
-        local id, chname = GetChannelName(target)
-        self:Safe_Print("Channel name: " .. (chname or "nil"))
-        if chname and chname:match("^Community:") then
-            local clubId, streamId = chname:match("^Community:(.-):(.-)$")
-            self:Safe_Print("Parsed clubId: " .. (clubId or "nil") ..
-                                ", streamId: " .. (streamId or "nil"))
-            if clubId and streamId then
-                self:Safe_Print(
-                    "Detected community channel, calling SendMessage")
-                self:SendMessage(clubId, streamId, msg)
-                return
-            end
-        end
-    end
-    if self.db.profile.enable then
-        if self.db.profile.name and self.db.profile.name ~= "" then
-            -- Determine if we should suppress adding the prefix based on exact/partial match
-            local shouldAddPrefix = true
-            if self.db.profile.hideOnMatchingCharName and character_name then
-                local nLower = string.lower(self.db.profile.name)
-                local cLower = string.lower(character_name or "")
-                if nLower == cLower then
-                    shouldAddPrefix = false
-                else
-                    local mode = self.db.profile.partialMatchMode or "disabled"
-                    if mode ~= "disabled" and #nLower > 0 then
-                        if mode == "start" then
-                            if cLower:sub(1, #nLower) == nLower then
-                                shouldAddPrefix = false
-                            end
-                        elseif mode == "anywhere" then
-                            if cLower:find(nLower, 1, true) ~= nil then
-                                shouldAddPrefix = false
-                            end
-                        elseif mode == "end" then
-                            if cLower:sub(-#nLower) == nLower then
-                                shouldAddPrefix = false
-                            end
-                        end
-                    end
-                end
-            end
-            if shouldAddPrefix then
-                if (self.db.profile.guild and
-                    (chatType == "GUILD" or chatType == "OFFICER")) or
-                    (self.db.profile.raid and chatType == "RAID") or
-                    (self.db.profile.party and chatType == "PARTY") or
-                    (self.db.profile.instance_chat and chatType ==
-                        "INSTANCE_CHAT") then
-                    msg = self:GetNamePrefix() .. msg
-                    -- Use World Chat Channels
-                elseif self.db.profile.world_chat and chatType == "CHANNEL" then
-                    msg = self:GetNamePrefix() .. msg
-                    -- Use Specified Chat Channel, commas are allowed
-                elseif self.db.profile.channel and chatType == "CHANNEL" then
-                    for i in string.gmatch(self.db.profile.channel, '([^,]+)') do
-                        local nameToMatch = strtrim(i)
-                        local id, chname = GetChannelName(target)
-                        if chname and strupper(nameToMatch) == strupper(chname) then
-                            msg = self:GetNamePrefix() .. msg
-                        end
-                    end
-                    -- LFR
-                elseif self.db.profile.lfr and IsInLFR() then
-                    msg = self:GetNamePrefix() .. msg
-                end
-            end
-        end
-    end
-    -- Call original function
-    if self._useCChatInfo then
-        self.hooks[C_ChatInfo].SendChatMessage(msg, chatType, language, target)
-    else
-        self.hooks.SendChatMessage(msg, chatType, language, target)
-    end
-end
-function IncognitoResurrected:SendMessage(clubID, streamID, msg)
-    self:Safe_Print("Entering SendMessage with clubID: " .. clubID ..
-                        ", streamID: " .. streamID)
-    if self.db and self.db.profile and self.db.profile.enable and type(msg) ==
-        "string" then
-        local symbols = self.db.profile.ignoreLeadingSymbols or "/!#"
-        local firstChar = msg:match("^%s*(.)")
-        if firstChar and symbols:find(firstChar, 1, true) then
-            self:Safe_Print("Ignoring due to leading symbol")
-            self.hooks[C_Club].SendMessage(clubID, streamID, msg)
-            return
-        end
-    end
-    if self.db.profile.enable and self.db.profile.community then
-        self:Safe_Print("Community option enabled")
-        local clubInfo = C_Club.GetClubInfo(clubID)
-        if clubInfo then
-            self:Safe_Print("Club type: " .. clubInfo.clubType)
-        else
-            self:Safe_Print("No clubInfo")
-        end
-        if clubInfo and
-            (clubInfo.clubType == Enum.ClubType.BattleNet or clubInfo.clubType ==
-                Enum.ClubType.Character) then
-            self:Safe_Print("Is community club")
-            local shouldAddPrefix = true
-            if self.db.profile.hideOnMatchingCharName and character_name then
-                local nLower = string.lower(self.db.profile.name or "")
-                local cLower = string.lower(character_name or "")
-                self:Safe_Print("Configured name lower: " .. nLower)
-                self:Safe_Print("Character name lower: " .. cLower)
-                if nLower == cLower then
-                    shouldAddPrefix = false
-                    self:Safe_Print("Names match exactly")
-                else
-                    local mode = self.db.profile.partialMatchMode or "disabled"
-                    self:Safe_Print("Partial match mode: " .. mode)
-                    if mode ~= "disabled" and #nLower > 0 then
-                        if mode == "start" then
-                            if cLower:sub(1, #nLower) == nLower then
-                                shouldAddPrefix = false
-                                self:Safe_Print("Matches start")
-                            end
-                        elseif mode == "anywhere" then
-                            if cLower:find(nLower, 1, true) ~= nil then
-                                shouldAddPrefix = false
-                                self:Safe_Print("Matches anywhere")
-                            end
-                        elseif mode == "end" then
-                            if cLower:sub(-#nLower) == nLower then
-                                shouldAddPrefix = false
-                                self:Safe_Print("Matches end")
-                            end
-                        end
-                    end
-                end
-            end
-            self:Safe_Print("shouldAddPrefix: " .. tostring(shouldAddPrefix))
-            if shouldAddPrefix then
+
+    -- Check if we should add prefix
+    if self.db and self.db.profile and self.db.profile.enable and
+        self.db.profile.name and self.db.profile.name ~= "" then
+        self:Safe_Print("Checking prefix conditions...")
+        -- Check if name matches character (suppress if it does)
+        local nameMatches = self.db.profile.hideOnMatchingCharName and
+                                self:NameMatchesCharacter()
+
+        if not nameMatches then
+            -- Check if this chat type should get the prefix
+            if self:ShouldAddPrefixForType(chatType, chatTarget) then
                 local prefix = self:GetNamePrefix()
+                local prefixedText = prefix .. text
                 self:Safe_Print("Adding prefix: " .. prefix)
-                msg = prefix .. msg
+                editBox:SetText(prefixedText)
+
+                -- Call original function with prefixed text, but don't add to history
+                self.hooks[editBox].SendText(editBox, 0)
+
+                -- Restore original text
+                editBox:SetText(text)
+
+                -- Add original text to history if requested
+                if addToHistory and addToHistory ~= 0 then
+                    editBox:AddHistoryLine(text)
+                end
+                return
+            else
+                self:Safe_Print("Chat type " .. tostring(chatType) ..
+                                    " not enabled for prefix")
             end
+        else
+            self:Safe_Print("Name matches character, skipping")
         end
+    else
+        self:Safe_Print("Addon disabled or name not configured")
     end
-    self.hooks[C_Club].SendMessage(clubID, streamID, msg)
+
+    -- Call original function
+    self.hooks[editBox].SendText(editBox, addToHistory)
 end
 --  Functions
 function IncognitoResurrected:Safe_Print(msg)
     if self.db.profile.debug then self:Print(msg) end
+end
+
+function IncognitoResurrected:NameMatchesCharacter()
+    if not character_name then return false end
+
+    local nLower = string.lower(self.db.profile.name or "")
+    local cLower = string.lower(character_name or "")
+
+    if nLower == cLower then return true end
+
+    local mode = self.db.profile.partialMatchMode or "disabled"
+    if mode ~= "disabled" and #nLower > 0 then
+        if mode == "start" then
+            return cLower:sub(1, #nLower) == nLower
+        elseif mode == "anywhere" then
+            return cLower:find(nLower, 1, true) ~= nil
+        elseif mode == "end" then
+            return cLower:sub(-#nLower) == nLower
+        end
+    end
+
+    return false
+end
+
+function IncognitoResurrected:ShouldAddPrefixForType(chatType, target)
+    if not self.db.profile.enable then return false end
+
+    -- Guild chat (includes officer)
+    if self.db.profile.guild and (chatType == "GUILD" or chatType == "OFFICER") then
+        return true
+    end
+
+    -- Party chat
+    if self.db.profile.party and chatType == "PARTY" then return true end
+
+    -- Raid chat
+    if self.db.profile.raid and chatType == "RAID" then return true end
+
+    -- Instance chat
+    if self.db.profile.instance_chat and chatType == "INSTANCE_CHAT" then
+        return true
+    end
+
+    -- LFR check
+    if self.db.profile.lfr and IsInLFR() then return true end
+
+    -- Channel chat
+    if chatType == "CHANNEL" then
+        -- Community channels
+        if self.db.profile.community and target then
+            -- Community channels have format "Community" in Classic or special format in Retail
+            if target:match("^Community") then return true end
+        end
+
+        -- World chat (all channels)
+        if self.db.profile.world_chat then return true end
+
+        -- Specific custom channels
+        if self.db.profile.channel and target then
+            for channelName in string.gmatch(self.db.profile.channel, '([^,]+)') do
+                local nameToMatch = strtrim(channelName)
+                if strupper(nameToMatch) == strupper(target) then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
 end
 function InterfaceOptionsFrame_OpenToCategory(IncognitoResurrected)
     if type(IncognitoResurrected) == "string" then
