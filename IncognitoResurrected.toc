@@ -23,4 +23,7 @@ IncognitoResurrected_esES.lua
 
 IncognitoResurrected.lua
 
+ClassicAPI.lua
+RetailAPI.lua
+
 
