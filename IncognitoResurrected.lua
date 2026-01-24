@@ -255,17 +255,43 @@ local SlashOptions = {
     args = {
         enable = {name = L["enable"], desc = L["enable_desc"], type = "toggle"},
         name = {name = L["name"], desc = L["name_desc"], type = "input"},
-        config = {
-            name = L["config"],
-            desc = L["config_desc"],
-            guiHidden = true,
+        debug = {
+            name = L["debug"],
+            desc = L["debug_desc"],
+            type = "toggle",
+            set = function(item, value)
+                IncognitoResurrected.db.profile.debug = value
+                IncognitoResurrected:Print(
+                    L["debug"] .. ": " .. (value and "ON" or "OFF"))
+            end
+        },
+        help = {
+            name = "Help",
+            desc = "Show available commands",
             type = "execute",
-            func = function() IncognitoResurrected:OpenConfig() end
+            func = function()
+                IncognitoResurrected:Print("Available commands:")
+                IncognitoResurrected:Print("/inc - Open configuration")
+                IncognitoResurrected:Print("/inc enable - Toggle addon on/off")
+                IncognitoResurrected:Print("/inc name <name> - Set display name")
+                IncognitoResurrected:Print("/inc debug - Toggle debug mode")
+                IncognitoResurrected:Print("/inc help - Show this help")
+            end
         }
     }
 }
 local SlashCmds = {"inc", "incognito", "IncognitoResurrected"};
 local character_name
+
+-- Custom slash command handler to open config by default
+function IncognitoResurrected:HandleSlashCommand(input)
+    if not input or input:trim() == "" then
+        self:OpenConfig()
+    else
+        LibStub("AceConfigCmd-3.0"):HandleCommand("inc", "IncognitoResurrected",
+                                                  input)
+    end
+end
 --  Init
 function IncognitoResurrected:IsRetailAPI()
     -- Check if C_ChatInfo.SendChatMessage exists (handles Retail and TBC Anniversary/SoD)
@@ -279,7 +305,16 @@ function IncognitoResurrected:OnInitialize()
     -- Set up our config options.
     local profiles = LibStub("AceDBOptions-3.0"):GetOptionsTable(self.db)
     local config = LibStub("AceConfig-3.0")
-    config:RegisterOptionsTable("IncognitoResurrected", SlashOptions, SlashCmds)
+    config:RegisterOptionsTable("IncognitoResurrected", SlashOptions)
+
+    -- Register custom slash command handler
+    for _, cmd in ipairs(SlashCmds) do
+        _G["SLASH_" .. cmd:upper() .. "1"] = "/" .. cmd
+        SlashCmdList[cmd:upper()] = function(msg)
+            IncognitoResurrected:HandleSlashCommand(msg)
+        end
+    end
+
     local registry = LibStub("AceConfigRegistry-3.0")
     registry:RegisterOptionsTable("IncognitoResurrected Options", Options)
     registry:RegisterOptionsTable("IncognitoResurrected Profiles", profiles);
