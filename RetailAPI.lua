@@ -1,5 +1,25 @@
+-- Version: 1.4.5
 -- RetailAPI.lua
 -- Retail WoW API implementation for Incognito Resurrected
+function IncognitoResurrected:OpenConfig()
+    -- Retail-specific config opening using AceConfigDialog
+    local dialog = LibStub("AceConfigDialog-3.0")
+    dialog:Open("IncognitoResurrected Options")
+
+    -- Customize frame appearance
+    local frame = dialog.OpenFrames["IncognitoResurrected Options"]
+    if frame and frame.frame then
+        frame.frame:SetHeight(580)
+        -- Add text to status box
+        if frame.statustext then
+            frame.statustext:SetText(
+                "Incognito Resurrected | https://www.curseforge.com/wow/addons/incognito-resurrected")
+        end
+        -- Hide the EditBox if it was created previously
+        if frame.linkBox then frame.linkBox:Hide() end
+    end
+end
+
 function IncognitoResurrected:RetailHooks()
     -- Hook the retail C_ChatInfo.SendChatMessage function
     self:RawHook(C_ChatInfo, "SendChatMessage", true)

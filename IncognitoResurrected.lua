@@ -1,4 +1,4 @@
---  Version: 1.4.3
+--  Version: 1.4.5
 IncognitoResurrected = LibStub("AceAddon-3.0"):NewAddon("IncognitoResurrected",
                                                         "AceConsole-3.0",
                                                         "AceEvent-3.0",
@@ -260,9 +260,7 @@ local SlashOptions = {
             desc = L["config_desc"],
             guiHidden = true,
             type = "execute",
-            func = function()
-                InterfaceOptionsFrame_OpenToCategory(IncognitoResurrected)
-            end
+            func = function() IncognitoResurrected:OpenConfig() end
         }
     }
 }
@@ -270,20 +268,9 @@ local SlashCmds = {"inc", "incognito", "IncognitoResurrected"};
 local character_name
 --  Init
 function IncognitoResurrected:IsRetailAPI()
-    -- Check if C_ChatInfo.SendChatMessage exists and is being used
-    -- This handles Retail AND SoD/TBC Anniversary which backported the Retail API
-    local result = type(C_ChatInfo) == "table" and
-                       type(C_ChatInfo.SendChatMessage) == "function"
-    DEFAULT_CHAT_FRAME:AddMessage("IsRetailAPI() - C_ChatInfo type: " ..
-                                      type(C_ChatInfo))
-    if C_ChatInfo then
-        DEFAULT_CHAT_FRAME:AddMessage(
-            "IsRetailAPI() - C_ChatInfo.SendChatMessage type: " ..
-                type(C_ChatInfo.SendChatMessage))
-    end
-    DEFAULT_CHAT_FRAME:AddMessage("IsRetailAPI() returning: " ..
-                                      tostring(result))
-    return result
+    -- Check if C_ChatInfo.SendChatMessage exists (handles Retail and TBC Anniversary/SoD)
+    return type(C_ChatInfo) == "table" and type(C_ChatInfo.SendChatMessage) ==
+               "function"
 end
 
 function IncognitoResurrected:OnInitialize()
@@ -305,28 +292,10 @@ function IncognitoResurrected:OnInitialize()
     }
     -- Detect API version and setup appropriate hooks
     local isRetail = self:IsRetailAPI()
-    if self.db.profile.debug then
-        self:Print("API Detection: isRetail = " .. tostring(isRetail))
-        self:Print("C_ChatInfo type: " .. type(C_ChatInfo))
-        if C_ChatInfo then
-            self:Print("C_ChatInfo.SendChatMessage type: " ..
-                           type(C_ChatInfo.SendChatMessage))
-        end
-    end
 
     if isRetail then
-        if self.db.profile.debug then
-            self:Print("Calling RetailHooks()")
-            self:Print("RetailHooks exists? " ..
-                           tostring(self.RetailHooks ~= nil))
-        end
         self:RetailHooks()
     else
-        if self.db.profile.debug then
-            self:Print("Calling ClassicHooks()")
-            self:Print("ClassicHooks exists? " ..
-                           tostring(self.ClassicHooks ~= nil))
-        end
         self:ClassicHooks()
     end
 

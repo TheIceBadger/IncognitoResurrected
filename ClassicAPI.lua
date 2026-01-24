@@ -1,3 +1,4 @@
+-- Version: 1.4.5
 -- ClassicAPI.lua
 -- Classic WoW API implementation for Incognito Resurrected
 function IncognitoResurrected:ClassicHooks()
@@ -6,13 +7,6 @@ function IncognitoResurrected:ClassicHooks()
 end
 
 function IncognitoResurrected:SendChatMessage(msg, chatType, language, target)
-    DEFAULT_CHAT_FRAME:AddMessage("=== SendChatMessage HOOK TRIGGERED ===")
-    DEFAULT_CHAT_FRAME:AddMessage("chatType: " .. tostring(chatType) ..
-                                      ", msg: " .. tostring(msg))
-
-    self:Safe_Print("ClassicAPI SendChatMessage called - chatType: " ..
-                        tostring(chatType) .. ", msg: " .. tostring(msg))
-
     -- Early out: ignore messages starting with configured symbols (after spaces)
     if self.db and self.db.profile and self.db.profile.enable and type(msg) ==
         "string" then
