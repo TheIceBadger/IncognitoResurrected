@@ -1,4 +1,4 @@
---  Version: 1.4.5
+--  Version: 1.4.7
 IncognitoResurrected = LibStub("AceAddon-3.0"):NewAddon("IncognitoResurrected",
                                                         "AceConsole-3.0",
                                                         "AceEvent-3.0",
@@ -389,8 +389,14 @@ local function ExtractPlayerGUID(...)
     end
 end
 function IncognitoResurrected:ChatPrefixColorFilter(frame, event, msg, author, ...)
+    -- Early out if feature is disabled
     if not (self.db and self.db.profile and self.db.profile.enable and
         self.db.profile.colorizePrefix) then return false end
+
+    -- Early out if no valid message or author (prevents taint with Secret API)
+    if not msg or type(msg) ~= "string" or not author or type(author) ~=
+        "string" or author == "" then return false end
+
     -- Match a leading bracketed name, requiring a colon after the closing bracket.
     -- Supports optional spaces before and after the colon.
     -- Examples: "(Name):msg", "(Name): msg", "(Name) :msg", "(Name) : msg"
@@ -399,17 +405,26 @@ function IncognitoResurrected:ChatPrefixColorFilter(frame, event, msg, author, .
             "^(%s*)([%(%[%{%<])([^%(%[%{%<%]%}%>]+)([%)%]%}%>])(%s*):(%s*)(.*)$")
     if not open then return false end
     if OPEN_TO_CLOSE[open] ~= close then return false end
-    -- Resolve class color of the sender
+
+    -- Resolve class color of the sender using pcall to prevent taint
     local guid = ExtractPlayerGUID(...)
     local classFile
     if guid and GetPlayerInfoByGUID then
-        local _, cf = GetPlayerInfoByGUID(guid)
-        classFile = cf
+        local success, _, cf = pcall(GetPlayerInfoByGUID, guid)
+        if success and cf then classFile = cf end
     end
-    if not classFile and author and UnitClass then
-        local unit = Ambiguate and Ambiguate(author, "none") or author
-        local _, cf = UnitClass(unit)
-        classFile = cf
+    if not classFile and UnitClass then
+        -- Only call Ambiguate if we have a valid author string to avoid taint errors with Secret API
+        local unit = author
+        if Ambiguate then
+            -- Protect against nil/invalid values that could cause taint in Midnight's Secret API
+            local success, result = pcall(Ambiguate, author, "none")
+            if success and result and type(result) == "string" and result ~= "" then
+                unit = result
+            end
+        end
+        local success, _, cf = pcall(UnitClass, unit)
+        if success and cf then classFile = cf end
     end
     if not classFile then return false end
     local colors =

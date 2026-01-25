@@ -1,4 +1,4 @@
--- Version: 1.4.5
+-- Version: 1.4.7
 -- RetailAPI.lua
 -- Retail WoW API implementation for Incognito Resurrected
 function IncognitoResurrected:OpenConfig()

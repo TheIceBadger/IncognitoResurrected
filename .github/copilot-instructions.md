@@ -8,6 +8,33 @@ WoW versions (Retail, Classic Era, Cata Classic) via interface version detection
 
 ## Architecture & Dependencies
 
+### API Separation Architecture
+
+**CRITICAL**: The addon uses a strict separation of API-specific code to support multiple
+WoW versions:
+
+- **[ClassicAPI.lua](../ClassicAPI.lua)**: Classic WoW API implementations
+  - `SendChatMessage` hook for global `SendChatMessage()` function
+  - `OpenConfig()` for Classic-specific config dialog
+  - `ClassicHooks()` to set up Classic-specific hooks
+- **[RetailAPI.lua](../RetailAPI.lua)**: Retail WoW API implementations
+  - `SendChatMessage` hook for `C_ChatInfo.SendChatMessage()`
+  - `SendMessage` hook for `C_Club.SendMessage()` (community channels)
+  - `OpenConfig()` for Retail-specific config dialog
+  - `RetailHooks()` to set up Retail-specific hooks
+
+- **[IncognitoResurrected.lua](../IncognitoResurrected.lua)**: Shared core functionality
+  - Addon initialization, options, localization, profiles
+  - `IsRetailAPI()` detection to determine which API file to use
+  - Client-side chat filters (colorization) - these use the same API on all versions
+  - Shared utility functions like `GetNamePrefix()`, `Safe_Print()`
+
+**When adding new code:**
+
+- Message sending hooks → Add to ClassicAPI.lua OR RetailAPI.lua depending on API used
+- Display/rendering features → Add to IncognitoResurrected.lua (shared)
+- WoW API function calls → Use `IsRetailAPI()` check or place in appropriate API file
+
 ### Ace3 Framework Foundation
 
 Built entirely on Ace3 libraries (embedded in `Libs/`):
@@ -20,18 +47,21 @@ Built entirely on Ace3 libraries (embedded in `Libs/`):
 
 Load order in [embeds.xml](../embeds.xml) is critical - LibStub must load first.
 
-### Hook Strategy (API Version Detection)
+### Runtime API Detection
 
-[IncognitoResurrected.lua](../IncognitoResurrected.lua) lines 290-302 detect WoW API
-version at runtime:
+[IncognitoResurrected.lua](../IncognitoResurrected.lua) `OnInitialize()` detects WoW API
+version at runtime using `IsRetailAPI()`:
 
 ```lua
-self._useCChatInfo = type(C_ChatInfo) == "table" and type(C_ChatInfo.SendChatMessage) == "function"
-self._useCClubInfo = type(C_Club) == "table" and type(C_Club.SendMessage) == "function"
+function IncognitoResurrected:IsRetailAPI()
+    return type(C_ChatInfo) == "table" and type(C_ChatInfo.SendChatMessage) == "function"
+end
 ```
 
-- **Retail (10.0+)**: Hooks `C_ChatInfo.SendChatMessage` and `C_Club.SendMessage`
-- **Classic**: Hooks global `SendChatMessage` function
+Then calls appropriate hooks:
+
+- **Retail (10.0+)**: Calls `self:RetailHooks()` from RetailAPI.lua
+- **Classic/Era/Cata**: Calls `self:ClassicHooks()` from ClassicAPI.lua
 - All hooks use `RawHook` to preserve original behavior
 
 ## Core Workflows
@@ -91,7 +121,12 @@ enabled. Critical for troubleshooting hook behavior without spamming users.
 
 ## Key Files
 
-- [IncognitoResurrected.lua](../IncognitoResurrected.lua): Main addon logic (584 lines)
+- [IncognitoResurrected.lua](../IncognitoResurrected.lua): Shared core logic
+  (initialization, options, filters)
+- [ClassicAPI.lua](../ClassicAPI.lua): Classic WoW API implementations (global
+  SendChatMessage hook)
+- [RetailAPI.lua](../RetailAPI.lua): Retail WoW API implementations (C_ChatInfo/C_Club
+  hooks)
 - [IncognitoResurrected.toc](../IncognitoResurrected.toc): Multi-version interface
   declarations
 - [IncognitoResurrected_enUS.lua](../IncognitoResurrected_enUS.lua): Localization template
@@ -101,10 +136,27 @@ enabled. Critical for troubleshooting hook behavior without spamming users.
 
 ### Adding New Channel Type
 
-1. Add profile default in `Defaults.profile` (lines 225-241)
-2. Add option to `generalOptions.args` (lines 120-222)
-3. Implement condition in `SendChatMessage` hook (lines 337-369)
+1. Add profile default in `Defaults.profile` in
+   [IncognitoResurrected.lua](../IncognitoResurrected.lua)
+2. Add option to `generalOptions.args` in
+   [IncognitoResurrected.lua](../IncognitoResurrected.lua)
+3. Implement condition in `SendChatMessage` hook in **BOTH**:
+   - [ClassicAPI.lua](../ClassicAPI.lua) for Classic support
+   - [RetailAPI.lua](../RetailAPI.lua) for Retail support
 4. Add localization strings to all `IncognitoResurrected_*.lua` files
+
+### Taint Prevention (Midnight/Secret API)
+
+Since Midnight (12.0.0), WoW's Secret API is stricter about taint during secure
+operations:
+
+- **Always validate parameters** before calling API functions (check for nil, type, empty
+  strings)
+- **Use pcall** to wrap potentially tainted API calls (Ambiguate, UnitClass,
+  GetPlayerInfoByGUID)
+- **Early return** in chat filters if message/author validation fails
+- **Never pass nil/invalid values** to API functions during combat/PvP
+- See `ChatPrefixColorFilter()` for reference implementation
 
 ### Testing
 
