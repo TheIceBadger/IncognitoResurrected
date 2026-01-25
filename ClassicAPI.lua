@@ -26,6 +26,12 @@ function IncognitoResurrected:ClassicHooks()
 end
 
 function IncognitoResurrected:SendChatMessage(msg, chatType, language, target)
+    -- Early out: bypass hook if chatType is nil/empty (slash commands, etc.)
+    if not chatType or chatType == "" then
+        self.hooks.SendChatMessage(msg, chatType, language, target)
+        return
+    end
+
     -- Early out: ignore messages starting with configured symbols (after spaces)
     if self.db and self.db.profile and self.db.profile.enable and type(msg) ==
         "string" then
