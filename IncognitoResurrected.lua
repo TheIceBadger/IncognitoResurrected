@@ -1,4 +1,4 @@
---  Version: 1.4.4
+--  Version: 1.4.5
 IncognitoResurrected = LibStub("AceAddon-3.0"):NewAddon("IncognitoResurrected",
                                                         "AceConsole-3.0",
                                                         "AceEvent-3.0",
@@ -255,34 +255,66 @@ local SlashOptions = {
     args = {
         enable = {name = L["enable"], desc = L["enable_desc"], type = "toggle"},
         name = {name = L["name"], desc = L["name_desc"], type = "input"},
-        config = {
-            name = L["config"],
-            desc = L["config_desc"],
-            guiHidden = true,
+        debug = {
+            name = L["debug"],
+            desc = L["debug_desc"],
+            type = "toggle",
+            set = function(item, value)
+                IncognitoResurrected.db.profile.debug = value
+                IncognitoResurrected:Print(
+                    L["debug"] .. ": " .. (value and "ON" or "OFF"))
+            end
+        },
+        help = {
+            name = "Help",
+            desc = "Show available commands",
             type = "execute",
             func = function()
-                -- Open settings using the modern approach or fallback to old method
-                if Settings and Settings.OpenToCategory then
-                    Settings.OpenToCategory(
-                        IncognitoResurrected.optionFrames.main.name)
-                elseif InterfaceOptionsFrame_OpenToCategory then
-                    InterfaceOptionsFrame_OpenToCategory(
-                        IncognitoResurrected.optionFrames.main)
-                end
+                IncognitoResurrected:Print("Available commands:")
+                IncognitoResurrected:Print("/inc - Open configuration")
+                IncognitoResurrected:Print("/inc enable - Toggle addon on/off")
+                IncognitoResurrected:Print("/inc name <name> - Set display name")
+                IncognitoResurrected:Print("/inc debug - Toggle debug mode")
+                IncognitoResurrected:Print("/inc help - Show this help")
             end
         }
     }
 }
 local SlashCmds = {"inc", "incognito", "IncognitoResurrected"};
 local character_name
+
+-- Custom slash command handler to open config by default
+function IncognitoResurrected:HandleSlashCommand(input)
+    if not input or input:trim() == "" then
+        self:OpenConfig()
+    else
+        LibStub("AceConfigCmd-3.0"):HandleCommand("inc", "IncognitoResurrected",
+                                                  input)
+    end
+end
 --  Init
+function IncognitoResurrected:IsRetailAPI()
+    -- Check if C_ChatInfo.SendChatMessage exists (handles Retail and TBC Anniversary/SoD)
+    return type(C_ChatInfo) == "table" and type(C_ChatInfo.SendChatMessage) ==
+               "function"
+end
+
 function IncognitoResurrected:OnInitialize()
     -- Load our database.
     self.db = LibStub("AceDB-3.0"):New("IncognitoResurrectedDB", Defaults, true)
     -- Set up our config options.
     local profiles = LibStub("AceDBOptions-3.0"):GetOptionsTable(self.db)
     local config = LibStub("AceConfig-3.0")
-    config:RegisterOptionsTable("IncognitoResurrected", SlashOptions, SlashCmds)
+    config:RegisterOptionsTable("IncognitoResurrected", SlashOptions)
+
+    -- Register custom slash command handler
+    for _, cmd in ipairs(SlashCmds) do
+        _G["SLASH_" .. cmd:upper() .. "1"] = "/" .. cmd
+        SlashCmdList[cmd:upper()] = function(msg)
+            IncognitoResurrected:HandleSlashCommand(msg)
+        end
+    end
+
     local registry = LibStub("AceConfigRegistry-3.0")
     registry:RegisterOptionsTable("IncognitoResurrected Options", Options)
     registry:RegisterOptionsTable("IncognitoResurrected Profiles", profiles);
@@ -293,165 +325,24 @@ function IncognitoResurrected:OnInitialize()
         profiles = dialog:AddToBlizOptions("IncognitoResurrected Profiles",
                                            "Profiles", "IncognitoResurrected")
     }
-    -- Hook editBox SendText methods instead of global function (modern WoW)
-    for i = 1, NUM_CHAT_WINDOWS do
-        local editBox = _G["ChatFrame" .. i .. "EditBox"]
-        if editBox then
-            self:RawHook(editBox, "SendText", "ChatEdit_SendText", true)
-        end
+    -- Detect API version and setup appropriate hooks
+    local isRetail = self:IsRetailAPI()
+
+    if isRetail then
+        self:RetailHooks()
+    else
+        self:ClassicHooks()
     end
 
     -- get current character name
     character_name, _ = UnitName("player")
     self:Safe_Print(L["Loaded"])
 end
---  Event Handlers
-function IncognitoResurrected:ChatEdit_SendText(editBox, addToHistory)
-    local text = editBox:GetText()
 
-    -- Don't process empty text
-    if not text or text == "" then
-        self.hooks[editBox].SendText(editBox, addToHistory)
-        return
-    end
-
-    -- Compatibility: GetAttribute may not exist in all versions, fallback to direct property access
-    local chatType =
-        (editBox.GetAttribute and editBox:GetAttribute("chatType")) or
-            editBox.chatType
-    local chatTarget = (editBox.GetAttribute and
-                           editBox:GetAttribute("tellTarget")) or
-                           editBox.tellTarget
-
-    self:Safe_Print(
-        "Hook called - Type: " .. tostring(chatType) .. ", Target: " ..
-            tostring(chatTarget) .. ", Text: " .. text)
-
-    -- Early out: ignore messages starting with configured symbols (after spaces)
-    if self.db and self.db.profile and self.db.profile.enable and type(text) ==
-        "string" then
-        local symbols = self.db.profile.ignoreLeadingSymbols or "/!#@?"
-        local firstChar = text:match("^%s*(.)")
-        if firstChar and symbols:find(firstChar, 1, true) then
-            self:Safe_Print("Skipping due to leading symbol: " .. firstChar)
-            self.hooks[editBox].SendText(editBox, addToHistory)
-            return
-        end
-    end
-
-    -- Check if we should add prefix
-    if self.db and self.db.profile and self.db.profile.enable and
-        self.db.profile.name and self.db.profile.name ~= "" then
-        self:Safe_Print("Checking prefix conditions...")
-        -- Check if name matches character (suppress if it does)
-        local nameMatches = self.db.profile.hideOnMatchingCharName and
-                                self:NameMatchesCharacter()
-
-        if not nameMatches then
-            -- Check if this chat type should get the prefix
-            if self:ShouldAddPrefixForType(chatType, chatTarget) then
-                local prefix = self:GetNamePrefix()
-                local prefixedText = prefix .. text
-                self:Safe_Print("Adding prefix: " .. prefix)
-                editBox:SetText(prefixedText)
-
-                -- Call original function with prefixed text, but don't add to history
-                self.hooks[editBox].SendText(editBox, 0)
-
-                -- Restore original text
-                editBox:SetText(text)
-
-                -- Add original text to history if requested
-                if addToHistory and addToHistory ~= 0 then
-                    editBox:AddHistoryLine(text)
-                end
-                return
-            else
-                self:Safe_Print("Chat type " .. tostring(chatType) ..
-                                    " not enabled for prefix")
-            end
-        else
-            self:Safe_Print("Name matches character, skipping")
-        end
-    else
-        self:Safe_Print("Addon disabled or name not configured")
-    end
-
-    -- Call original function
-    self.hooks[editBox].SendText(editBox, addToHistory)
-end
+--  SendChatMessage and SendMessage are now implemented in ClassicAPI.lua or RetailAPI.lua
 --  Functions
 function IncognitoResurrected:Safe_Print(msg)
     if self.db.profile.debug then self:Print(msg) end
-end
-
-function IncognitoResurrected:NameMatchesCharacter()
-    if not character_name then return false end
-
-    local nLower = string.lower(self.db.profile.name or "")
-    local cLower = string.lower(character_name or "")
-
-    if nLower == cLower then return true end
-
-    local mode = self.db.profile.partialMatchMode or "disabled"
-    if mode ~= "disabled" and #nLower > 0 then
-        if mode == "start" then
-            return cLower:sub(1, #nLower) == nLower
-        elseif mode == "anywhere" then
-            return cLower:find(nLower, 1, true) ~= nil
-        elseif mode == "end" then
-            return cLower:sub(-#nLower) == nLower
-        end
-    end
-
-    return false
-end
-
-function IncognitoResurrected:ShouldAddPrefixForType(chatType, target)
-    if not self.db.profile.enable then return false end
-
-    -- Guild chat (includes officer)
-    if self.db.profile.guild and (chatType == "GUILD" or chatType == "OFFICER") then
-        return true
-    end
-
-    -- Party chat
-    if self.db.profile.party and chatType == "PARTY" then return true end
-
-    -- Raid chat
-    if self.db.profile.raid and chatType == "RAID" then return true end
-
-    -- Instance chat
-    if self.db.profile.instance_chat and chatType == "INSTANCE_CHAT" then
-        return true
-    end
-
-    -- LFR check
-    if self.db.profile.lfr and IsInLFR() then return true end
-
-    -- Channel chat
-    if chatType == "CHANNEL" then
-        -- Community channels
-        if self.db.profile.community and target then
-            -- Community channels have format "Community" in Classic or special format in Retail
-            if target:match("^Community") then return true end
-        end
-
-        -- World chat (all channels)
-        if self.db.profile.world_chat then return true end
-
-        -- Specific custom channels
-        if self.db.profile.channel and target then
-            for channelName in string.gmatch(self.db.profile.channel, '([^,]+)') do
-                local nameToMatch = strtrim(channelName)
-                if strupper(nameToMatch) == strupper(target) then
-                    return true
-                end
-            end
-        end
-    end
-
-    return false
 end
 function InterfaceOptionsFrame_OpenToCategory(IncognitoResurrected)
     if type(IncognitoResurrected) == "string" then
