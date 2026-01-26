@@ -281,7 +281,6 @@ local SlashOptions = {
     }
 }
 local SlashCmds = {"inc", "incognito", "IncognitoResurrected"};
-local character_name
 
 -- Custom slash command handler to open config by default
 function IncognitoResurrected:HandleSlashCommand(input)
@@ -334,8 +333,11 @@ function IncognitoResurrected:OnInitialize()
         self:ClassicHooks()
     end
 
-    -- get current character name
-    character_name, _ = UnitName("player")
+    -- Store API type for combat unhooking
+    self._isRetailAPI = isRetail
+
+    -- get current character name and store on addon object so API files can access it
+    self.character_name = UnitName("player")
     self:Safe_Print(L["Loaded"])
 end
 
@@ -471,6 +473,42 @@ function IncognitoResurrected:UnregisterChatFilters()
     end
     self._filtersRegistered = false
 end
-function IncognitoResurrected:OnEnable() self:RegisterChatFilters() end
-function IncognitoResurrected:OnDisable() self:UnregisterChatFilters() end
+function IncognitoResurrected:OnEnable()
+    self:RegisterChatFilters()
+    -- Unregister filters during combat to prevent Secret API taint
+    self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnEnterCombat")
+    self:RegisterEvent("PLAYER_REGEN_ENABLED", "OnLeaveCombat")
+end
+function IncognitoResurrected:OnDisable()
+    self:UnregisterChatFilters()
+    self:UnregisterEvent("PLAYER_REGEN_DISABLED")
+    self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+end
+function IncognitoResurrected:OnEnterCombat()
+    -- Unregister chat filters to prevent taint during combat
+    self:UnregisterChatFilters()
+    -- Unhook message sending to prevent ADDON_ACTION_FORBIDDEN
+    if self._isRetailAPI then
+        if self:IsHooked(C_ChatInfo, "SendChatMessage") then
+            self:Unhook(C_ChatInfo, "SendChatMessage")
+        end
+        if self:IsHooked(C_Club, "SendMessage") then
+            self:Unhook(C_Club, "SendMessage")
+        end
+    else
+        if self:IsHooked("SendChatMessage") then
+            self:Unhook("SendChatMessage")
+        end
+    end
+end
+function IncognitoResurrected:OnLeaveCombat()
+    -- Re-register chat filters when leaving combat
+    self:RegisterChatFilters()
+    -- Re-hook message sending
+    if self._isRetailAPI then
+        self:RetailHooks()
+    else
+        self:ClassicHooks()
+    end
+end
 

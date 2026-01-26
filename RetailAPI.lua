@@ -9,7 +9,24 @@ function IncognitoResurrected:OpenConfig()
     -- Customize frame appearance
     local frame = dialog.OpenFrames["IncognitoResurrected Options"]
     if frame and frame.frame then
-        frame.frame:SetHeight(580)
+        frame.frame:SetWidth(700)
+        frame.frame:SetHeight(650)
+        frame.frame:SetResizable(false)
+        frame.frame:SetClampedToScreen(true)
+        -- Prevent auto-resizing
+        if frame.frame.SetMinResize then
+            frame.frame:SetMinResize(700, 650)
+            frame.frame:SetMaxResize(700, 650)
+        end
+        -- Lock the frame size by overriding SetWidth and SetHeight
+        local origSetWidth = frame.frame.SetWidth
+        local origSetHeight = frame.frame.SetHeight
+        frame.frame.SetWidth = function(self, width)
+            origSetWidth(self, 700)
+        end
+        frame.frame.SetHeight = function(self, height)
+            origSetHeight(self, 650)
+        end
         -- Add text to status box
         if frame.statustext then
             frame.statustext:SetText(
@@ -31,6 +48,12 @@ function IncognitoResurrected:RetailHooks()
 end
 
 function IncognitoResurrected:SendChatMessage(msg, chatType, language, target)
+    -- Early out during combat to prevent ADDON_ACTION_FORBIDDEN errors
+    if InCombatLockdown() then
+        self.hooks[C_ChatInfo].SendChatMessage(msg, chatType, language, target)
+        return
+    end
+
     -- Early out: bypass hook if chatType is nil/empty (slash commands, etc.)
     if not chatType or chatType == "" then
         self.hooks[C_ChatInfo].SendChatMessage(msg, chatType, language, target)
@@ -68,11 +91,17 @@ function IncognitoResurrected:SendChatMessage(msg, chatType, language, target)
         if self.db.profile.name and self.db.profile.name ~= "" then
             -- Determine if we should suppress adding the prefix based on exact/partial match
             local shouldAddPrefix = true
-            if self.db.profile.hideOnMatchingCharName and character_name then
+            if self.db.profile.hideOnMatchingCharName and self.character_name then
                 local nLower = string.lower(self.db.profile.name)
-                local cLower = string.lower(character_name or "")
+                local cLower = string.lower(self.character_name or "")
+                self:Safe_Print("Checking match - Config name: " .. nLower ..
+                                    ", Character name: " .. cLower)
+                self:Safe_Print("hideOnMatchingCharName enabled: " ..
+                                    tostring(
+                                        self.db.profile.hideOnMatchingCharName))
                 if nLower == cLower then
                     shouldAddPrefix = false
+                    self:Safe_Print("Names match exactly - hiding prefix")
                 else
                     local mode = self.db.profile.partialMatchMode or "disabled"
                     if mode ~= "disabled" and #nLower > 0 then
@@ -124,6 +153,12 @@ function IncognitoResurrected:SendChatMessage(msg, chatType, language, target)
 end
 
 function IncognitoResurrected:SendMessage(clubID, streamID, msg)
+    -- Early out during combat to prevent ADDON_ACTION_FORBIDDEN errors
+    if InCombatLockdown() then
+        self.hooks[C_Club].SendMessage(clubID, streamID, msg)
+        return
+    end
+
     self:Safe_Print("Entering SendMessage with clubID: " .. clubID ..
                         ", streamID: " .. streamID)
     if self.db and self.db.profile and self.db.profile.enable and type(msg) ==
@@ -149,9 +184,9 @@ function IncognitoResurrected:SendMessage(clubID, streamID, msg)
                 Enum.ClubType.Character) then
             self:Safe_Print("Is community club")
             local shouldAddPrefix = true
-            if self.db.profile.hideOnMatchingCharName and character_name then
+            if self.db.profile.hideOnMatchingCharName and self.character_name then
                 local nLower = string.lower(self.db.profile.name or "")
-                local cLower = string.lower(character_name or "")
+                local cLower = string.lower(self.character_name or "")
                 self:Safe_Print("Configured name lower: " .. nLower)
                 self:Safe_Print("Character name lower: " .. cLower)
                 if nLower == cLower then
