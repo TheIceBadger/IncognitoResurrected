@@ -1,6 +1,7 @@
 # Incognito Resurrected
 
 #### Incognito adds your specified name in front of your chat messages. Incongito Resurrrected can be enabled for guild (and officer), party and raid chat messages.
+###### Note: Midnight API changes have limited certain aspects of the Addon. Addon now 'disables' in Combat Instances and 'enables' once outside of those instances.
 
 ## Example
 
@@ -55,9 +56,8 @@ help.
 ## Credits
 
 Original Author: Nyyr  
-Resurrected Author: Starlynk  
-Collaborator: TheIceBadger  
-Contributors: Hubbotu
+Resurrected Author: Starlynk
+Contributors: TheIceBadger, Hubbotu
 
 ##
 
