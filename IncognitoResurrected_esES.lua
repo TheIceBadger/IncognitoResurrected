@@ -1,4 +1,4 @@
--- Version 1.4.0
+-- Version 1.5.0
 local L = LibStub("AceLocale-3.0"):NewLocale("IncognitoResurrected", "esES",
                                              true)
 if not L then return end
@@ -17,8 +17,13 @@ L["guild_desc"] =
 L["guildinfo"] =
     "Los mensajes de chat de hermandad se generan desde el marco de Chat, no desde el marco de Hermandad."
 
+L["dungeon"] = "Mazmorra"
+L["dungeon_desc"] =
+    "Añadir nombre a los mensajes de chat de grupo en mazmorras (/p)."
+
 L["party"] = "Grupo"
-L["party_desc"] = "Añadir nombre a los mensajes de chat de grupo (/p)."
+L["party_desc"] =
+    "Añadir nombre a los mensajes de chat de grupo en mundo abierto (/p)."
 
 L["raid"] = "Banda"
 L["raid_desc"] = "Añadir nombre a los mensajes de chat de banda (/raid)."
@@ -26,9 +31,12 @@ L["raid_desc"] = "Añadir nombre a los mensajes de chat de banda (/raid)."
 L["lfr"] = "LFR"
 L["lfr_desc"] = "Añadir nombre a los mensajes de chat de LFR (/raid o /i)."
 
-L["instance_chat"] = "Instancia"
-L["instance_chat_desc"] =
-    "Añadir nombre a los mensajes de chat de instancia, p.ej., LFR y campos de batalla (/i)."
+L["battleground"] = "Campo de batalla"
+L["battleground_desc"] =
+    "Añadir nombre a los mensajes de chat en campos de batalla (/i)."
+
+L["arena"] = "Arena"
+L["arena_desc"] = "Añadir nombre a los mensajes de chat en arenas (/i)."
 
 L["world_chat"] = "Chat Mundial"
 L["world_chat_desc"] =
