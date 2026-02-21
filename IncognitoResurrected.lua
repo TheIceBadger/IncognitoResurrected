@@ -1,4 +1,4 @@
---  Version: 1.6.0
+--  Version: 1.5.0
 IncognitoResurrected = LibStub("AceAddon-3.0"):NewAddon("IncognitoResurrected",
                                                         "AceConsole-3.0",
                                                         "AceEvent-3.0");
@@ -132,7 +132,7 @@ local Options = {
                     name = L["dungeon"],
                     desc = L["dungeon_desc"],
                     disabled = function()
-                        return IncognitoResurrected:IsRetailAPI()
+                        return IncognitoResurrected:IsModernRetail()
                     end
                 },
                 raid = {
@@ -142,7 +142,7 @@ local Options = {
                     name = L["raid"],
                     desc = L["raid_desc"],
                     disabled = function()
-                        return IncognitoResurrected:IsRetailAPI()
+                        return IncognitoResurrected:IsModernRetail()
                     end
                 },
                 battleground = {
@@ -152,7 +152,7 @@ local Options = {
                     name = L["battleground"],
                     desc = L["battleground_desc"],
                     disabled = function()
-                        return IncognitoResurrected:IsRetailAPI()
+                        return IncognitoResurrected:IsModernRetail()
                     end
                 },
                 arena = {
@@ -162,7 +162,10 @@ local Options = {
                     name = L["arena"],
                     desc = L["arena_desc"],
                     disabled = function()
-                        return IncognitoResurrected:IsRetailAPI()
+                        return IncognitoResurrected:IsModernRetail()
+                    end,
+                    hidden = function()
+                        return not IncognitoResurrected:HasArenas()
                     end
                 },
                 world_chat = {
@@ -428,6 +431,20 @@ end
 function IncognitoResurrected:IsRetailAPI()
     return type(C_ChatInfo) == "table" and type(C_ChatInfo.SendChatMessage) ==
                "function"
+end
+
+-- Returns true only on modern Retail (TWW 11.x / Midnight 12.x+) where
+-- SetText() taint in combat instances causes ADDON_ACTION_FORBIDDEN.
+-- MoP Classic (5.x) has C_ChatInfo but no taint restrictions.
+function IncognitoResurrected:IsModernRetail()
+    local _, _, _, tocVersion = GetBuildInfo()
+    return tocVersion and tocVersion >= 110000
+end
+
+-- Arenas were introduced in TBC (2.0).  Classic Era (1.x) has none.
+function IncognitoResurrected:HasArenas()
+    local _, _, _, tocVersion = GetBuildInfo()
+    return tocVersion and tocVersion >= 20000
 end
 ---------------------------------------------------------------------
 -- Slash Commands

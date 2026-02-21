@@ -1,5 +1,5 @@
 ---------------------------------------------------------------------
--- ChatCompat.lua  (v5)
+-- ChatCompat.lua  (v6)
 -- Abstraction layer for Retail / Classic Chat APIs
 --
 -- Retail: EditBox pre-hook approach — hooks chat editbox OnKeyDown to
@@ -7,8 +7,12 @@
 -- Never replaces C_ChatInfo.SendChatMessage, preventing taint.
 --
 -- Classic: Manual table-swap hooks (no taint issues in Classic).
+-- 
+-- Note: This Library has been modified from the original place I had
+-- found it. Name2Chat was the first place I saw its use, not sure if
+-- is the original author. But credits to them for the original work.
 ---------------------------------------------------------------------
-local MAJOR, MINOR = "ChatCompat", 5
+local MAJOR, MINOR = "ChatCompat", 6
 local ChatCompat = LibStub:NewLibrary(MAJOR, MINOR)
 if not ChatCompat then return end
 
@@ -18,6 +22,13 @@ if not ChatCompat then return end
 ChatCompat._hooks = ChatCompat._hooks or {}
 -- Reset editbox hooks on version upgrade so new hook code is installed
 ChatCompat._hooks.editBoxesHooked = false
+
+-- Modern Retail (TWW 11.x / Midnight 12.x+) has taint restrictions;
+-- MoP Classic (5.x) uses EditBox hooks too but has no taint issue.
+local function isModernRetail()
+    local _, _, _, tocVersion = GetBuildInfo()
+    return tocVersion and tocVersion >= 110000
+end
 
 ---------------------------------------------------------------------
 -- API Detection
@@ -146,11 +157,13 @@ function ChatCompat:HookChatEditBoxes(addon)
 
             if not chatType then return end
 
-            -- In combat instances (battlegrounds / arenas) SetText()
-            -- from addon code taints the editbox text and Blizzard's
-            -- secure send path rejects it (ADDON_ACTION_FORBIDDEN).
-            -- Skip prefix injection when inside a combat instance.
-            if type(GetInstanceInfo) == "function" then
+            -- On modern Retail (TWW / Midnight), SetText() from addon
+            -- code taints the editbox text in combat instances and
+            -- Blizzard's secure send path rejects it
+            -- (ADDON_ACTION_FORBIDDEN).  Skip prefix injection when
+            -- inside a combat instance on those clients only.
+            -- MoP Classic uses EditBox hooks too but has no taint issue.
+            if isModernRetail() and type(GetInstanceInfo) == "function" then
                 local _, instanceType = GetInstanceInfo()
                 if instanceType == "pvp" or instanceType == "arena" then
                     return
