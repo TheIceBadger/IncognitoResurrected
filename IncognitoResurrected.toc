@@ -1,17 +1,20 @@
-## Interface: 110107, 110200, 120000, 50503, 20505, 11508
+## Interface: 11507, 50500, 110107, 110200, 120000, 120001
 ## Title: Incognito Resurrected
 ## Notes: Adds your name to chat messages
 
 ## Author: info@starlynk.net
-## Version: 1.4.5
+## Version: 1.6.0
 ## SavedVariables: IncognitoResurrectedDB
 ## OptionalDeps: Ace3
 
 ## X-Curse-Project-ID: 961634
 
+
 #@no-lib-strip@
 embeds.xml
 #@end-no-lib-strip@
+
+Libs\ChatCompat\ChatCompat.lua
 
 IncognitoResurrected_enUS.lua
 IncognitoResurrected_deDE.lua
@@ -19,8 +22,4 @@ IncognitoResurrected_ruRU.lua
 IncognitoResurrected_esES.lua
 
 IncognitoResurrected.lua
-
-ClassicAPI.lua
-RetailAPI.lua
-
 

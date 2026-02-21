@@ -1,10 +1,10 @@
---  Version: 1.4.5
+--  Version: 1.6.0
 IncognitoResurrected = LibStub("AceAddon-3.0"):NewAddon("IncognitoResurrected",
                                                         "AceConsole-3.0",
-                                                        "AceEvent-3.0",
-                                                        "AceHook-3.0");
+                                                        "AceEvent-3.0");
 --  Localization
 local L = LibStub("AceLocale-3.0"):GetLocale("IncognitoResurrected", true)
+local ChatCompat = LibStub("ChatCompat")
 --  Main Section
 local Options = {
     name = "Incognito Resurrected",
@@ -255,66 +255,27 @@ local SlashOptions = {
     args = {
         enable = {name = L["enable"], desc = L["enable_desc"], type = "toggle"},
         name = {name = L["name"], desc = L["name_desc"], type = "input"},
-        debug = {
-            name = L["debug"],
-            desc = L["debug_desc"],
-            type = "toggle",
-            set = function(item, value)
-                IncognitoResurrected.db.profile.debug = value
-                IncognitoResurrected:Print(
-                    L["debug"] .. ": " .. (value and "ON" or "OFF"))
-            end
-        },
-        help = {
-            name = "Help",
-            desc = "Show available commands",
+        config = {
+            name = L["config"],
+            desc = L["config_desc"],
+            guiHidden = true,
             type = "execute",
             func = function()
-                IncognitoResurrected:Print("Available commands:")
-                IncognitoResurrected:Print("/inc - Open configuration")
-                IncognitoResurrected:Print("/inc enable - Toggle addon on/off")
-                IncognitoResurrected:Print("/inc name <name> - Set display name")
-                IncognitoResurrected:Print("/inc debug - Toggle debug mode")
-                IncognitoResurrected:Print("/inc help - Show this help")
+                InterfaceOptionsFrame_OpenToCategory(IncognitoResurrected)
             end
         }
     }
 }
 local SlashCmds = {"inc", "incognito", "IncognitoResurrected"};
 local character_name
-
--- Custom slash command handler to open config by default
-function IncognitoResurrected:HandleSlashCommand(input)
-    if not input or input:trim() == "" then
-        self:OpenConfig()
-    else
-        LibStub("AceConfigCmd-3.0"):HandleCommand("inc", "IncognitoResurrected",
-                                                  input)
-    end
-end
 --  Init
-function IncognitoResurrected:IsRetailAPI()
-    -- Check if C_ChatInfo.SendChatMessage exists (handles Retail and TBC Anniversary/SoD)
-    return type(C_ChatInfo) == "table" and type(C_ChatInfo.SendChatMessage) ==
-               "function"
-end
-
 function IncognitoResurrected:OnInitialize()
     -- Load our database.
     self.db = LibStub("AceDB-3.0"):New("IncognitoResurrectedDB", Defaults, true)
     -- Set up our config options.
     local profiles = LibStub("AceDBOptions-3.0"):GetOptionsTable(self.db)
     local config = LibStub("AceConfig-3.0")
-    config:RegisterOptionsTable("IncognitoResurrected", SlashOptions)
-
-    -- Register custom slash command handler
-    for _, cmd in ipairs(SlashCmds) do
-        _G["SLASH_" .. cmd:upper() .. "1"] = "/" .. cmd
-        SlashCmdList[cmd:upper()] = function(msg)
-            IncognitoResurrected:HandleSlashCommand(msg)
-        end
-    end
-
+    config:RegisterOptionsTable("IncognitoResurrected", SlashOptions, SlashCmds)
     local registry = LibStub("AceConfigRegistry-3.0")
     registry:RegisterOptionsTable("IncognitoResurrected Options", Options)
     registry:RegisterOptionsTable("IncognitoResurrected Profiles", profiles);
@@ -325,21 +286,167 @@ function IncognitoResurrected:OnInitialize()
         profiles = dialog:AddToBlizOptions("IncognitoResurrected Profiles",
                                            "Profiles", "IncognitoResurrected")
     }
-    -- Detect API version and setup appropriate hooks
-    local isRetail = self:IsRetailAPI()
-
-    if isRetail then
-        self:RetailHooks()
-    else
-        self:ClassicHooks()
-    end
-
+    -- Store API detection flags
+    self._useCChatInfo = ChatCompat.api.useCChatInfo
+    self._useCClubInfo = ChatCompat.api.useCClub
     -- get current character name
     character_name, _ = UnitName("player")
     self:Safe_Print(L["Loaded"])
 end
-
---  SendChatMessage and SendMessage are now implemented in ClassicAPI.lua or RetailAPI.lua
+--  Event Handlers
+function IncognitoResurrected:SendChatMessage(msg, chatType, language, target)
+    -- Early out: ignore messages starting with configured symbols (after spaces)
+    if self.db and self.db.profile and self.db.profile.enable and type(msg) ==
+        "string" then
+        local symbols = self.db.profile.ignoreLeadingSymbols or "/!#"
+        local firstChar = msg:match("^%s*(.)")
+        if firstChar and symbols:find(firstChar, 1, true) then
+            ChatCompat:CallOriginalSendChatMessage(msg, chatType, language,
+                                                   target)
+            return
+        end
+    end
+    if self.db.profile.enable and self.db.profile.community and chatType ==
+        "CHANNEL" then
+        local id, chname = GetChannelName(target)
+        self:Safe_Print("Channel name: " .. (chname or "nil"))
+        if chname and chname:match("^Community:") then
+            local clubId, streamId = chname:match("^Community:(.-):(.-)$")
+            self:Safe_Print("Parsed clubId: " .. (clubId or "nil") ..
+                                ", streamId: " .. (streamId or "nil"))
+            if clubId and streamId then
+                self:Safe_Print(
+                    "Detected community channel, calling SendMessage")
+                self:SendMessage(clubId, streamId, msg)
+                return
+            end
+        end
+    end
+    if self.db.profile.enable then
+        if self.db.profile.name and self.db.profile.name ~= "" then
+            -- Determine if we should suppress adding the prefix based on exact/partial match
+            local shouldAddPrefix = true
+            if self.db.profile.hideOnMatchingCharName and character_name then
+                local nLower = string.lower(self.db.profile.name)
+                local cLower = string.lower(character_name or "")
+                if nLower == cLower then
+                    shouldAddPrefix = false
+                else
+                    local mode = self.db.profile.partialMatchMode or "disabled"
+                    if mode ~= "disabled" and #nLower > 0 then
+                        if mode == "start" then
+                            if cLower:sub(1, #nLower) == nLower then
+                                shouldAddPrefix = false
+                            end
+                        elseif mode == "anywhere" then
+                            if cLower:find(nLower, 1, true) ~= nil then
+                                shouldAddPrefix = false
+                            end
+                        elseif mode == "end" then
+                            if cLower:sub(-#nLower) == nLower then
+                                shouldAddPrefix = false
+                            end
+                        end
+                    end
+                end
+            end
+            if shouldAddPrefix then
+                if (self.db.profile.guild and
+                    (chatType == "GUILD" or chatType == "OFFICER")) or
+                    (self.db.profile.raid and chatType == "RAID") or
+                    (self.db.profile.party and chatType == "PARTY") or
+                    (self.db.profile.instance_chat and chatType ==
+                        "INSTANCE_CHAT") then
+                    msg = self:GetNamePrefix() .. msg
+                    -- Use World Chat Channels
+                elseif self.db.profile.world_chat and chatType == "CHANNEL" then
+                    msg = self:GetNamePrefix() .. msg
+                    -- Use Specified Chat Channel, commas are allowed
+                elseif self.db.profile.channel and chatType == "CHANNEL" then
+                    for i in string.gmatch(self.db.profile.channel, '([^,]+)') do
+                        local nameToMatch = strtrim(i)
+                        local id, chname = GetChannelName(target)
+                        if chname and strupper(nameToMatch) == strupper(chname) then
+                            msg = self:GetNamePrefix() .. msg
+                        end
+                    end
+                    -- LFR
+                elseif self.db.profile.lfr and IsInLFR() then
+                    msg = self:GetNamePrefix() .. msg
+                end
+            end
+        end
+    end
+    -- Call original function
+    ChatCompat:CallOriginalSendChatMessage(msg, chatType, language, target)
+end
+function IncognitoResurrected:SendMessage(clubID, streamID, msg)
+    self:Safe_Print("Entering SendMessage with clubID: " .. clubID ..
+                        ", streamID: " .. streamID)
+    if self.db and self.db.profile and self.db.profile.enable and type(msg) ==
+        "string" then
+        local symbols = self.db.profile.ignoreLeadingSymbols or "/!#"
+        local firstChar = msg:match("^%s*(.)")
+        if firstChar and symbols:find(firstChar, 1, true) then
+            self:Safe_Print("Ignoring due to leading symbol")
+            ChatCompat:CallOriginalClubSendMessage(clubID, streamID, msg)
+            return
+        end
+    end
+    if self.db.profile.enable and self.db.profile.community then
+        self:Safe_Print("Community option enabled")
+        local clubInfo = C_Club.GetClubInfo(clubID)
+        if clubInfo then
+            self:Safe_Print("Club type: " .. clubInfo.clubType)
+        else
+            self:Safe_Print("No clubInfo")
+        end
+        if clubInfo and
+            (clubInfo.clubType == Enum.ClubType.BattleNet or clubInfo.clubType ==
+                Enum.ClubType.Character) then
+            self:Safe_Print("Is community club")
+            local shouldAddPrefix = true
+            if self.db.profile.hideOnMatchingCharName and character_name then
+                local nLower = string.lower(self.db.profile.name or "")
+                local cLower = string.lower(character_name or "")
+                self:Safe_Print("Configured name lower: " .. nLower)
+                self:Safe_Print("Character name lower: " .. cLower)
+                if nLower == cLower then
+                    shouldAddPrefix = false
+                    self:Safe_Print("Names match exactly")
+                else
+                    local mode = self.db.profile.partialMatchMode or "disabled"
+                    self:Safe_Print("Partial match mode: " .. mode)
+                    if mode ~= "disabled" and #nLower > 0 then
+                        if mode == "start" then
+                            if cLower:sub(1, #nLower) == nLower then
+                                shouldAddPrefix = false
+                                self:Safe_Print("Matches start")
+                            end
+                        elseif mode == "anywhere" then
+                            if cLower:find(nLower, 1, true) ~= nil then
+                                shouldAddPrefix = false
+                                self:Safe_Print("Matches anywhere")
+                            end
+                        elseif mode == "end" then
+                            if cLower:sub(-#nLower) == nLower then
+                                shouldAddPrefix = false
+                                self:Safe_Print("Matches end")
+                            end
+                        end
+                    end
+                end
+            end
+            self:Safe_Print("shouldAddPrefix: " .. tostring(shouldAddPrefix))
+            if shouldAddPrefix then
+                local prefix = self:GetNamePrefix()
+                self:Safe_Print("Adding prefix: " .. prefix)
+                msg = prefix .. msg
+            end
+        end
+    end
+    ChatCompat:CallOriginalClubSendMessage(clubID, streamID, msg)
+end
 --  Functions
 function IncognitoResurrected:Safe_Print(msg)
     if self.db.profile.debug then self:Print(msg) end
@@ -379,6 +486,85 @@ function IncognitoResurrected:GetNamePrefix()
     local pair = pairs[style] or pairs.paren
     return pair[1] .. (self.db.profile.name or "") .. pair[2] .. ": "
 end
+---------------------------------------------------------------------
+-- Process outgoing text for EditBox hook (Retail)
+-- Returns the modified text (with prefix) or the original text unchanged.
+-- This is the Retail equivalent of the Classic SendChatMessage hook.
+---------------------------------------------------------------------
+function IncognitoResurrected:ProcessOutgoingText(text, chatType, target)
+    if not self.db or not self.db.profile or not self.db.profile.enable then
+        return text
+    end
+    if not text or text == "" or type(text) ~= "string" then return text end
+
+    -- Ignore messages starting with configured symbols
+    local symbols = self.db.profile.ignoreLeadingSymbols or "/!#"
+    local firstChar = text:match("^%s*(.)")
+    if firstChar and symbols:find(firstChar, 1, true) then return text end
+
+    -- No name configured
+    if not self.db.profile.name or self.db.profile.name == "" then
+        return text
+    end
+
+    -- Name matching: suppress prefix if character name matches configured name
+    local shouldAddPrefix = true
+    if self.db.profile.hideOnMatchingCharName and character_name then
+        local nLower = string.lower(self.db.profile.name)
+        local cLower = string.lower(character_name or "")
+        if nLower == cLower then
+            shouldAddPrefix = false
+        else
+            local mode = self.db.profile.partialMatchMode or "disabled"
+            if mode ~= "disabled" and #nLower > 0 then
+                if mode == "start" then
+                    if cLower:sub(1, #nLower) == nLower then
+                        shouldAddPrefix = false
+                    end
+                elseif mode == "anywhere" then
+                    if cLower:find(nLower, 1, true) ~= nil then
+                        shouldAddPrefix = false
+                    end
+                elseif mode == "end" then
+                    if cLower:sub(-#nLower) == nLower then
+                        shouldAddPrefix = false
+                    end
+                end
+            end
+        end
+    end
+    if not shouldAddPrefix then return text end
+
+    -- Community channels (checked before world_chat to avoid double-prefix)
+    if self.db.profile.community and chatType == "CHANNEL" and target then
+        local id, chname = GetChannelName(target)
+        if chname and chname:match("^Community:") then
+            return self:GetNamePrefix() .. text
+        end
+    end
+
+    -- Standard channel types
+    if (self.db.profile.guild and (chatType == "GUILD" or chatType == "OFFICER")) or
+        (self.db.profile.raid and chatType == "RAID") or
+        (self.db.profile.party and chatType == "PARTY") or
+        (self.db.profile.instance_chat and chatType == "INSTANCE_CHAT") then
+        return self:GetNamePrefix() .. text
+    elseif self.db.profile.world_chat and chatType == "CHANNEL" then
+        return self:GetNamePrefix() .. text
+    elseif self.db.profile.channel and chatType == "CHANNEL" then
+        for i in string.gmatch(self.db.profile.channel, '([^,]+)') do
+            local nameToMatch = strtrim(i)
+            local id, chname = GetChannelName(target)
+            if chname and strupper(nameToMatch) == strupper(chname) then
+                return self:GetNamePrefix() .. text
+            end
+        end
+    elseif self.db.profile.lfr and IsInLFR() then
+        return self:GetNamePrefix() .. text
+    end
+
+    return text
+end
 -- Class-color prefix rendering (client-side)
 local OPEN_TO_CLOSE = {["("] = ")", ["["] = "]", ["{"] = "}", ["<"] = ">"}
 local function ExtractPlayerGUID(...)
@@ -391,6 +577,11 @@ end
 function IncognitoResurrected:ChatPrefixColorFilter(frame, event, msg, author, ...)
     if not (self.db and self.db.profile and self.db.profile.enable and
         self.db.profile.colorizePrefix) then return false end
+    -- Skip Secret Values from Midnight Retail instances
+    if type(msg) ~= "string" then return false end
+    if type(issecretvalue) == "function" and issecretvalue(msg) then
+        return false
+    end
     -- Match a leading bracketed name, requiring a colon after the closing bracket.
     -- Supports optional spaces before and after the colon.
     -- Examples: "(Name):msg", "(Name): msg", "(Name) :msg", "(Name) : msg"
@@ -399,17 +590,21 @@ function IncognitoResurrected:ChatPrefixColorFilter(frame, event, msg, author, .
             "^(%s*)([%(%[%{%<])([^%(%[%{%<%]%}%>]+)([%)%]%}%>])(%s*):(%s*)(.*)$")
     if not open then return false end
     if OPEN_TO_CLOSE[open] ~= close then return false end
-    -- Resolve class color of the sender
+    -- Resolve class color of the sender (pcall to prevent taint in Midnight)
     local guid = ExtractPlayerGUID(...)
     local classFile
     if guid and GetPlayerInfoByGUID then
-        local _, cf = GetPlayerInfoByGUID(guid)
-        classFile = cf
+        local ok, _, cf = pcall(GetPlayerInfoByGUID, guid)
+        if ok then classFile = cf end
     end
     if not classFile and author and UnitClass then
-        local unit = Ambiguate and Ambiguate(author, "none") or author
-        local _, cf = UnitClass(unit)
-        classFile = cf
+        local unit = author
+        if Ambiguate then
+            local ok, result = pcall(Ambiguate, author, "none")
+            if ok and result then unit = result end
+        end
+        local ok, _, cf = pcall(UnitClass, unit)
+        if ok then classFile = cf end
     end
     if not classFile then return false end
     local colors =
@@ -456,6 +651,37 @@ function IncognitoResurrected:UnregisterChatFilters()
     end
     self._filtersRegistered = false
 end
-function IncognitoResurrected:OnEnable() self:RegisterChatFilters() end
-function IncognitoResurrected:OnDisable() self:UnregisterChatFilters() end
+---------------------------------------------------------------------
+-- Lifecycle: OnEnable / OnDisable
+---------------------------------------------------------------------
+function IncognitoResurrected:OnEnable()
+    -- Register chat filters for class coloring
+    self:RegisterChatFilters()
+
+    -- Set up hooks based on API version
+    if self._useCChatInfo then
+        -- Retail: EditBox pre-hook approach.
+        -- Hooks chat editbox OnKeyDown to modify outgoing text before
+        -- Enter triggers Blizzard's secure send path.
+        -- Never replaces C_ChatInfo.SendChatMessage -> no taint.
+        ChatCompat:HookChatEditBoxes(self)
+        self._prefixEnabled = true
+    else
+        -- Classic: manual table-swap hooks (no taint issues in Classic)
+        ChatCompat:HookSendChatMessage(self)
+        if self._useCClubInfo then ChatCompat:HookClubSendMessage(self) end
+    end
+end
+
+function IncognitoResurrected:OnDisable()
+    if self._useCChatInfo then
+        -- Retail: disable prefix flag (HookScript hooks are permanent)
+        self._prefixEnabled = false
+    else
+        -- Classic: remove table-swap hooks
+        ChatCompat:UnhookAll()
+    end
+    -- Unregister chat filters
+    self:UnregisterChatFilters()
+end
 
