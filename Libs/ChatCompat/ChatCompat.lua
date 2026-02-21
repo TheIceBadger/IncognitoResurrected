@@ -1,5 +1,5 @@
 ---------------------------------------------------------------------
--- ChatCompat.lua  (v3)
+-- ChatCompat.lua  (v4)
 -- Abstraction layer for Retail / Classic Chat APIs
 --
 -- Retail: EditBox pre-hook approach — hooks chat editbox OnKeyDown to
@@ -8,7 +8,7 @@
 --
 -- Classic: Manual table-swap hooks (no taint issues in Classic).
 ---------------------------------------------------------------------
-local MAJOR, MINOR = "ChatCompat", 3
+local MAJOR, MINOR = "ChatCompat", 4
 local ChatCompat = LibStub:NewLibrary(MAJOR, MINOR)
 if not ChatCompat then return end
 
@@ -108,11 +108,17 @@ function ChatCompat:UnhookClubSendMessage()
 end
 
 ---------------------------------------------------------------------
--- Retail: EditBox pre-hook approach
--- Hooks chat editbox OnKeyDown to modify text before Enter triggers the
--- secure send path.  This never replaces C_ChatInfo.SendChatMessage,
--- preventing taint entirely.
--- HookScript does not spread taint per WoW API documentation.
+-- Retail: EditBox OnKeyDown pre-hook approach
+--
+-- OnKeyDown fires BEFORE OnEnterPressed in WoW's event chain:
+--   1. OnKeyDown original handler → 2. OnKeyDown HookScript (us) →
+--   3. OnEnterPressed original handler (sends & clears text)
+--
+-- So our HookScript fires while text & chatType are still available.
+-- We modify the text via SetText() and OnEnterPressed then sends it.
+--
+-- hooksecurefunc/HookScript don't spread taint, so the secure send
+-- path (C_ChatInfo.SendChatMessage) runs in a clean context.
 ---------------------------------------------------------------------
 function ChatCompat:HookChatEditBoxes(addon)
     if self._hooks.editBoxesHooked then return end
@@ -120,10 +126,6 @@ function ChatCompat:HookChatEditBoxes(addon)
     local function hookSingleEditBox(editBox)
         if not editBox or editBox._chatCompatHooked then return end
 
-        -- OnKeyDown fires BEFORE OnEnterPressed for the same key event.
-        -- When the user presses Enter, our hook modifies the text in the
-        -- editbox.  Blizzard's OnEnterPressed then reads the modified text
-        -- and sends it through the untainted, secure API path.
         editBox:HookScript("OnKeyDown", function(eb, key)
             if key ~= "ENTER" and key ~= "NUMPADENTER" then return end
             if not addon._prefixEnabled then return end
@@ -131,14 +133,30 @@ function ChatCompat:HookChatEditBoxes(addon)
             local text = eb:GetText()
             if not text or text == "" then return end
 
-            local chatType = eb.chatType
-            local target = eb.channelTarget
+            -- Midnight stores chatType as a frame attribute, not a field
+            local chatType = eb:GetAttribute("chatType") or
+                                 (eb.GetChatType and eb:GetChatType()) or
+                                 eb.chatType
 
-            -- ProcessOutgoingText is implemented on the addon object
-            local modified = addon:ProcessOutgoingText(text, chatType, target)
-            if modified and modified ~= text then
-                eb:SetText(modified)
+            -- Channel target via method (Midnight) or field (Classic)
+            local target = (eb.GetChannelTarget and eb:GetChannelTarget()) or
+                               eb.channelTarget
+
+            if not chatType then return end
+
+            -- In combat instances (battlegrounds / arenas) SetText()
+            -- from addon code taints the editbox text and Blizzard's
+            -- secure send path rejects it (ADDON_ACTION_FORBIDDEN).
+            -- Skip prefix injection when inside a combat instance.
+            if type(GetInstanceInfo) == "function" then
+                local _, instanceType = GetInstanceInfo()
+                if instanceType == "pvp" or instanceType == "arena" then
+                    return
+                end
             end
+
+            local newText = addon:ProcessOutgoingText(text, chatType, target)
+            if newText and newText ~= text then eb:SetText(newText) end
         end)
 
         editBox._chatCompatHooked = true
@@ -147,10 +165,15 @@ function ChatCompat:HookChatEditBoxes(addon)
     -- Hook all existing chat editboxes
     local numFrames = NUM_CHAT_WINDOWS or 10
     for i = 1, numFrames do
-        hookSingleEditBox(_G["ChatFrame" .. i .. "EditBox"])
+        local eb = _G["ChatFrame" .. i .. "EditBox"]
+        hookSingleEditBox(eb)
+        if eb then
+            addon:Safe_Print("[ChatCompat] Hooked ChatFrame" .. i ..
+                                 "EditBox OnKeyDown")
+        end
     end
 
-    -- Catch temporary windows opened later
+    -- Catch new temporary windows
     if type(FCF_OpenTemporaryWindow) == "function" then
         hooksecurefunc("FCF_OpenTemporaryWindow", function()
             for i = 1, (NUM_CHAT_WINDOWS or 10) do
@@ -161,6 +184,8 @@ function ChatCompat:HookChatEditBoxes(addon)
 
     self._hooks.editBoxesHooked = true
     addon._prefixEnabled = true
+    addon:Safe_Print(
+        "[ChatCompat] OnKeyDown hooks installed, prefixEnabled=true")
 end
 
 ---------------------------------------------------------------------

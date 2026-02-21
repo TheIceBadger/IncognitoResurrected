@@ -29,33 +29,33 @@ local Options = {
                     name = L["name"],
                     desc = L["name_desc"]
                 },
-                Spacer1 = {
-                    order = 1.5,
+                spacerName = {
+                    order = 1.2,
                     type = "description",
-                    width = "double",
+                    width = 0.5,
                     name = ""
                 },
                 enable = {
-                    order = 2,
+                    order = 1.5,
                     type = "toggle",
                     name = L["enable"],
                     desc = L["enable_desc"],
-                    width = "normal"
+                    width = 1.5
                 },
-                Spacer2 = {
-                    order = 2.5,
-                    type = "description",
-                    width = "half",
-                    name = ""
+                colorizePrefix = {
+                    order = 2,
+                    type = "toggle",
+                    name = "Color Name by class",
+                    desc = "Color the Incognito Name with the sender's class color.",
+                    width = 1.5
                 },
                 hideOnMatchingCharName = {
-                    order = 3,
+                    order = 2.5,
                     type = "toggle",
                     name = L["hideOnMatchingCharName"],
                     desc = L["hideOnMatchingCharName_desc"],
-                    width = "double"
+                    width = 1.5
                 },
-                -- Matching mode for character vs configured name
                 partialMatchMode = {
                     order = 4,
                     type = "select",
@@ -74,37 +74,14 @@ local Options = {
                                    .hideOnMatchingCharName
                     end
                 },
-                Spacer3 = {
-                    order = 4.5,
+                spacerBracket = {
+                    order = 4.2,
                     type = "description",
-                    width = "half",
+                    width = 0.5,
                     name = ""
                 },
-                -- New option: Colorize prefix by class color
-                colorizePrefix = {
-                    order = 5,
-                    type = "toggle",
-                    name = "Color Name by class",
-                    desc = "Color the Incognito Name with the sender's class color.",
-                    width = "double"
-                },
-                -- New option: Ignore leading symbols
-                ignoreLeadingSymbols = {
-                    order = 6,
-                    type = "input",
-                    name = L["ignoreLeadingSymbols"],
-                    desc = L["ignoreLeadingSymbols_desc"],
-                    width = "normal"
-                },
-                spacer4 = {
-                    order = 7,
-                    type = "description",
-                    name = "",
-                    width = "half"
-                },
-                -- New option: Bracket style selector
                 bracketStyle = {
-                    order = 8,
+                    order = 4.5,
                     type = "select",
                     name = L["bracketStyle"],
                     desc = L["bracketStyle_desc"],
@@ -113,7 +90,14 @@ local Options = {
                         square = "[square]",
                         curly = "{curly}",
                         angle = "<angle>"
-                    }
+                    },
+                    width = "normal"
+                },
+                specialCharsInfo = {
+                    order = 5,
+                    type = "description",
+                    width = "full",
+                    name = "|cFFFFA500Messages starting with / ! # @ ? are automatically ignored.|r"
                 }
             }
         },
@@ -141,36 +125,45 @@ local Options = {
                     type = "description",
                     name = "|cFFFFA500" .. L["guildinfo"]
                 },
-                party = {
+                dungeon = {
                     order = 2,
                     type = "toggle",
                     width = 0.6,
-                    name = L["party"],
-                    desc = L["party_desc"]
+                    name = L["dungeon"],
+                    desc = L["dungeon_desc"],
+                    disabled = function()
+                        return IncognitoResurrected:IsRetailAPI()
+                    end
                 },
                 raid = {
                     order = 3,
                     type = "toggle",
                     width = 0.6,
                     name = L["raid"],
-                    desc = L["raid_desc"]
-                },
-                lfr = {
-                    order = 4,
-                    type = "toggle",
-                    width = 0.6,
-                    name = L["lfr"],
-                    desc = L["lfr_desc"],
-                    hidden = function()
-                        return not IncognitoResurrected:IsLFRAvailable()
+                    desc = L["raid_desc"],
+                    disabled = function()
+                        return IncognitoResurrected:IsRetailAPI()
                     end
                 },
-                instance_chat = {
+                battleground = {
                     order = 5,
                     type = "toggle",
                     width = 0.6,
-                    name = L["instance_chat"],
-                    desc = L["instance_chat_desc"]
+                    name = L["battleground"],
+                    desc = L["battleground_desc"],
+                    disabled = function()
+                        return IncognitoResurrected:IsRetailAPI()
+                    end
+                },
+                arena = {
+                    order = 5.5,
+                    type = "toggle",
+                    width = 0.6,
+                    name = L["arena"],
+                    desc = L["arena_desc"],
+                    disabled = function()
+                        return IncognitoResurrected:IsRetailAPI()
+                    end
                 },
                 world_chat = {
                     order = 6,
@@ -202,7 +195,7 @@ local Options = {
                     name = L["community"],
                     desc = L["community_desc"],
                     hidden = function()
-                        return not IncognitoResurrected:IsLFRAvailable()
+                        return not IncognitoResurrected:IsRetailAPI()
                     end
                 },
                 communityinfo = {
@@ -210,7 +203,7 @@ local Options = {
                     type = "description",
                     name = "|cFFFFA500" .. L["community_info_text"],
                     hidden = function()
-                        return not IncognitoResurrected:IsLFRAvailable()
+                        return not IncognitoResurrected:IsRetailAPI()
                     end
                 },
                 debug = {
@@ -228,45 +221,21 @@ local Defaults = {
     profile = {
         enable = true,
         guild = true,
-        party = false,
+        dungeon = false,
         raid = false,
-        lfr = false,
-        instance_chat = false,
+        battleground = false,
+        arena = false,
         world_chat = false,
         debug = false,
         channel = nil,
         community = false,
         hideOnMatchingCharName = true,
-        -- Default ignored leading symbols
-        ignoreLeadingSymbols = "/!#@?",
         -- Default bracket style
         bracketStyle = "paren",
         -- Class-color the bracketed prefix in chat frames
         colorizePrefix = true
     }
 }
-local SlashOptions = {
-    type = "group",
-    handler = IncognitoResurrected,
-    get = function(item) return IncognitoResurrected.db.profile[item[#item]] end,
-    set = function(item, value)
-        IncognitoResurrected.db.profile[item[#item]] = value
-    end,
-    args = {
-        enable = {name = L["enable"], desc = L["enable_desc"], type = "toggle"},
-        name = {name = L["name"], desc = L["name_desc"], type = "input"},
-        config = {
-            name = L["config"],
-            desc = L["config_desc"],
-            guiHidden = true,
-            type = "execute",
-            func = function()
-                InterfaceOptionsFrame_OpenToCategory(IncognitoResurrected)
-            end
-        }
-    }
-}
-local SlashCmds = {"inc", "incognito", "IncognitoResurrected"};
 local character_name
 --  Init
 function IncognitoResurrected:OnInitialize()
@@ -274,8 +243,6 @@ function IncognitoResurrected:OnInitialize()
     self.db = LibStub("AceDB-3.0"):New("IncognitoResurrectedDB", Defaults, true)
     -- Set up our config options.
     local profiles = LibStub("AceDBOptions-3.0"):GetOptionsTable(self.db)
-    local config = LibStub("AceConfig-3.0")
-    config:RegisterOptionsTable("IncognitoResurrected", SlashOptions, SlashCmds)
     local registry = LibStub("AceConfigRegistry-3.0")
     registry:RegisterOptionsTable("IncognitoResurrected Options", Options)
     registry:RegisterOptionsTable("IncognitoResurrected Profiles", profiles);
@@ -286,6 +253,10 @@ function IncognitoResurrected:OnInitialize()
         profiles = dialog:AddToBlizOptions("IncognitoResurrected Profiles",
                                            "Profiles", "IncognitoResurrected")
     }
+    -- Slash commands: /inc and /incognito open the config window
+    self:RegisterChatCommand("inc", "SlashCommand")
+    self:RegisterChatCommand("incognito", "SlashCommand")
+    self:RegisterChatCommand("debug", "SlashDebug")
     -- Store API detection flags
     self._useCChatInfo = ChatCompat.api.useCChatInfo
     self._useCClubInfo = ChatCompat.api.useCClub
@@ -295,10 +266,10 @@ function IncognitoResurrected:OnInitialize()
 end
 --  Event Handlers
 function IncognitoResurrected:SendChatMessage(msg, chatType, language, target)
-    -- Early out: ignore messages starting with configured symbols (after spaces)
+    -- Early out: ignore messages starting with special characters (after spaces)
     if self.db and self.db.profile and self.db.profile.enable and type(msg) ==
         "string" then
-        local symbols = self.db.profile.ignoreLeadingSymbols or "/!#"
+        local symbols = "/!#@?"
         local firstChar = msg:match("^%s*(.)")
         if firstChar and symbols:find(firstChar, 1, true) then
             ChatCompat:CallOriginalSendChatMessage(msg, chatType, language,
@@ -354,9 +325,8 @@ function IncognitoResurrected:SendChatMessage(msg, chatType, language, target)
                 if (self.db.profile.guild and
                     (chatType == "GUILD" or chatType == "OFFICER")) or
                     (self.db.profile.raid and chatType == "RAID") or
-                    (self.db.profile.party and chatType == "PARTY") or
-                    (self.db.profile.instance_chat and chatType ==
-                        "INSTANCE_CHAT") then
+                    (self.db.profile.dungeon and chatType == "PARTY") or
+                    self:IsInstanceChatAllowed(chatType) then
                     msg = self:GetNamePrefix() .. msg
                     -- Use World Chat Channels
                 elseif self.db.profile.world_chat and chatType == "CHANNEL" then
@@ -370,9 +340,6 @@ function IncognitoResurrected:SendChatMessage(msg, chatType, language, target)
                             msg = self:GetNamePrefix() .. msg
                         end
                     end
-                    -- LFR
-                elseif self.db.profile.lfr and IsInLFR() then
-                    msg = self:GetNamePrefix() .. msg
                 end
             end
         end
@@ -385,7 +352,7 @@ function IncognitoResurrected:SendMessage(clubID, streamID, msg)
                         ", streamID: " .. streamID)
     if self.db and self.db.profile and self.db.profile.enable and type(msg) ==
         "string" then
-        local symbols = self.db.profile.ignoreLeadingSymbols or "/!#"
+        local symbols = "/!#@?"
         local firstChar = msg:match("^%s*(.)")
         if firstChar and symbols:find(firstChar, 1, true) then
             self:Safe_Print("Ignoring due to leading symbol")
@@ -451,27 +418,43 @@ end
 function IncognitoResurrected:Safe_Print(msg)
     if self.db.profile.debug then self:Print(msg) end
 end
-function InterfaceOptionsFrame_OpenToCategory(IncognitoResurrected)
-    if type(IncognitoResurrected) == "string" then
-        return Settings.OpenToCategory(IncognitoResurrected);
-    elseif type(IncognitoResurrected) == "table" then
-        local frame = IncognitoResurrected;
-        local category = frame.name;
-        if category and type(category) == "string" then
-            return Settings.OpenToCategory(category);
+function IncognitoResurrected:IsRetailAPI()
+    return type(C_ChatInfo) == "table" and type(C_ChatInfo.SendChatMessage) ==
+               "function"
+end
+---------------------------------------------------------------------
+-- Slash Commands
+---------------------------------------------------------------------
+function IncognitoResurrected:SlashCommand(input)
+    input = input and input:trim() or ""
+    local cmd, rest = input:match("^(%S+)%s*(.*)$")
+    cmd = cmd and cmd:lower() or ""
+    if cmd == "help" then
+        self:PrintHelp()
+        return
+    elseif cmd == "name" then
+        local newName = rest:match('^"(.-)"$') or rest
+        if newName and newName ~= "" then
+            self.db.profile.name = newName
+            self:Print("Incognito name set to: |cFF00FF00" .. newName .. "|r")
+        else
+            self:Print("Usage: /inc name <name>")
         end
+        return
     end
+    -- /inc or /incognito opens the config window
+    local categoryID = self.optionFrames and self.optionFrames.main and
+                           self.optionFrames.main.name
+    if categoryID then Settings.OpenToCategory(categoryID) end
 end
-function IsInLFR()
-    local _, instanceType, difficultyID = GetInstanceInfo()
-    return instanceType == "raid" and difficultyID == 17
-end
-function IncognitoResurrected:IsLFRAvailable()
-    if type(GetDifficultyInfo) == "function" then
-        local name = GetDifficultyInfo(17)
-        return name ~= nil
+
+function IncognitoResurrected:SlashDebug(input)
+    self.db.profile.debug = not self.db.profile.debug
+    if self.db.profile.debug then
+        self:Print("Debug mode |cFF00FF00enabled|r")
+    else
+        self:Print("Debug mode |cFFFF0000disabled|r")
     end
-    return false
 end
 function IncognitoResurrected:GetNamePrefix()
     local style =
@@ -487,6 +470,30 @@ function IncognitoResurrected:GetNamePrefix()
     return pair[1] .. (self.db.profile.name or "") .. pair[2] .. ": "
 end
 ---------------------------------------------------------------------
+-- Instance-type check for INSTANCE_CHAT
+-- Maps current instance type to the corresponding user toggle.
+---------------------------------------------------------------------
+function IncognitoResurrected:IsInstanceChatAllowed(chatType)
+    if chatType ~= "INSTANCE_CHAT" then return false end
+    local _, instanceType = GetInstanceInfo()
+    self:Safe_Print(
+        "[Instance] type=" .. tostring(instanceType) .. " chatType=" ..
+            tostring(chatType))
+    if instanceType == "pvp" then
+        self:Safe_Print("[Instance] BG check: battleground=" ..
+                            tostring(self.db.profile.battleground))
+        return self.db.profile.battleground
+    elseif instanceType == "arena" then
+        return self.db.profile.arena
+    elseif instanceType == "party" then
+        -- LFG dungeon /i chat
+        return self.db.profile.dungeon
+    elseif instanceType == "raid" then
+        return self.db.profile.raid
+    end
+    return false
+end
+---------------------------------------------------------------------
 -- Process outgoing text for EditBox hook (Retail)
 -- Returns the modified text (with prefix) or the original text unchanged.
 -- This is the Retail equivalent of the Classic SendChatMessage hook.
@@ -497,8 +504,8 @@ function IncognitoResurrected:ProcessOutgoingText(text, chatType, target)
     end
     if not text or text == "" or type(text) ~= "string" then return text end
 
-    -- Ignore messages starting with configured symbols
-    local symbols = self.db.profile.ignoreLeadingSymbols or "/!#"
+    -- Ignore messages starting with special characters
+    local symbols = "/!#@?"
     local firstChar = text:match("^%s*(.)")
     if firstChar and symbols:find(firstChar, 1, true) then return text end
 
@@ -546,8 +553,8 @@ function IncognitoResurrected:ProcessOutgoingText(text, chatType, target)
     -- Standard channel types
     if (self.db.profile.guild and (chatType == "GUILD" or chatType == "OFFICER")) or
         (self.db.profile.raid and chatType == "RAID") or
-        (self.db.profile.party and chatType == "PARTY") or
-        (self.db.profile.instance_chat and chatType == "INSTANCE_CHAT") then
+        (self.db.profile.dungeon and chatType == "PARTY") or
+        self:IsInstanceChatAllowed(chatType) then
         return self:GetNamePrefix() .. text
     elseif self.db.profile.world_chat and chatType == "CHANNEL" then
         return self:GetNamePrefix() .. text
@@ -559,8 +566,6 @@ function IncognitoResurrected:ProcessOutgoingText(text, chatType, target)
                 return self:GetNamePrefix() .. text
             end
         end
-    elseif self.db.profile.lfr and IsInLFR() then
-        return self:GetNamePrefix() .. text
     end
 
     return text
@@ -580,6 +585,11 @@ function IncognitoResurrected:ChatPrefixColorFilter(frame, event, msg, author, .
     -- Skip Secret Values from Midnight Retail instances
     if type(msg) ~= "string" then return false end
     if type(issecretvalue) == "function" and issecretvalue(msg) then
+        return false
+    end
+    -- Guard against secret-value author (e.g. CHAT_MSG_CURRENCY in Midnight)
+    if type(author) ~= "string" then return false end
+    if type(issecretvalue) == "function" and issecretvalue(author) then
         return false
     end
     -- Match a leading bracketed name, requiring a colon after the closing bracket.
@@ -663,7 +673,7 @@ function IncognitoResurrected:OnEnable()
         -- Retail: EditBox pre-hook approach.
         -- Hooks chat editbox OnKeyDown to modify outgoing text before
         -- Enter triggers Blizzard's secure send path.
-        -- Never replaces C_ChatInfo.SendChatMessage -> no taint.
+        -- Skips prefix in combat instances (BG/arena) to avoid taint.
         ChatCompat:HookChatEditBoxes(self)
         self._prefixEnabled = true
     else
@@ -683,5 +693,13 @@ function IncognitoResurrected:OnDisable()
     end
     -- Unregister chat filters
     self:UnregisterChatFilters()
+end
+
+function IncognitoResurrected:PrintHelp()
+    self:Print("Incognito Resurrected Slash Commands:")
+    self:Print("/inc - Open the config window")
+    self:Print("/inc help - Show this help message")
+    self:Print("/inc name <name> - Set your incognito name prefix")
+    self:Print("/debug - Toggle debug mode")
 end
 
