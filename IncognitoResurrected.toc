@@ -4,6 +4,7 @@
 
 ## Author: info@starlynk.net
 ## Version: 1.6.0
+## Category: Chat
 ## SavedVariables: IncognitoResurrectedDB
 ## OptionalDeps: Ace3
 
