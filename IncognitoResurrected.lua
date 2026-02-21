@@ -212,6 +212,13 @@ local Options = {
                     width = "full",
                     name = L["debug"],
                     desc = L["debug_desc"]
+                },
+                party = {
+                    order = 1.7,
+                    type = "toggle",
+                    width = 0.6,
+                    name = L["party"],
+                    desc = L["party_desc"]
                 }
             }
         }
@@ -565,6 +572,14 @@ function IncognitoResurrected:ProcessOutgoingText(text, chatType, target)
             if chname and strupper(nameToMatch) == strupper(chname) then
                 return self:GetNamePrefix() .. text
             end
+        end
+    end
+
+    -- Party chat prefix (disabled only in combat instances)
+    if self.db.profile.party and chatType == "PARTY" then
+        local _, instanceType = GetInstanceInfo()
+        if instanceType ~= "pvp" and instanceType ~= "arena" then
+            return self:GetNamePrefix() .. text
         end
     end
 

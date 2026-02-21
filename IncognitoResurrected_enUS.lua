@@ -19,6 +19,8 @@ L["guildinfo"] =
 
 L["dungeon"] = "Dungeon"
 L["dungeon_desc"] = "Add name to party chat messages in dungeons (/p)."
+L["party"] = "Party"
+L["party_desc"] = "Add name to party chat messages in open world (/p)."
 
 L["raid"] = "Raid"
 L["raid_desc"] = "Add name to raid chat messages (/raid)."

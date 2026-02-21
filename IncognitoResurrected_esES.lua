@@ -21,6 +21,10 @@ L["dungeon"] = "Mazmorra"
 L["dungeon_desc"] =
     "Añadir nombre a los mensajes de chat de grupo en mazmorras (/p)."
 
+L["party"] = "Grupo"
+L["party_desc"] =
+    "Añadir nombre a los mensajes de chat de grupo en mundo abierto (/p)."
+
 L["raid"] = "Banda"
 L["raid_desc"] = "Añadir nombre a los mensajes de chat de banda (/raid)."
 

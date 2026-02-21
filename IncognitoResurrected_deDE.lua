@@ -22,6 +22,10 @@ L["dungeon"] = "Dungeon"
 L["dungeon_desc"] =
     "Deinen Namen bei Gruppenchatnachrichten in Dungeons anzeigen (/p)."
 
+L["party"] = "Gruppe"
+L["party_desc"] =
+    "Deinen Namen bei Gruppenchatnachrichten in der offenen Welt anzeigen (/p)."
+
 L["raid"] = "Schlachtzug"
 L["raid_desc"] =
     "Deinen Namen bei Schlachtzugschatnachrichten anzeigen (/raid)."
