@@ -6,6 +6,56 @@ World of Warcraft addon that prefixes chat messages with a custom name. Supports
 WoW versions (Retail, Classic Era, Cata Classic) via interface version detection in
 [IncognitoResurrected.toc](../IncognitoResurrected.toc).
 
+## CRITICAL UNRESOLVED ISSUE - PVP ADDON_ACTION_FORBIDDEN Error
+
+**Status**: UNRESOLVED - Persistent error in battlegrounds/arenas despite multiple fix
+attempts
+
+**Error Details**:
+
+```
+[ADDON_ACTION_FORBIDDEN] AddOn 'IncognitoResurrected' tried to call the protected function 'UNKNOWN()'
+[C]: in function 'SendChatMessage'
+[IncognitoResurrected/RetailAPI.lua]:123: in function <IncognitoResurrected/RetailAPI.lua:33>
+```
+
+**Problem**: Even after unhooking with `self:Unhook(C_ChatInfo, "SendChatMessage")`, our
+function is STILL being called in PVP instances. The unhook doesn't remove us from the
+call chain as expected.
+
+**Attempted Fixes** (all failed):
+
+1. Store original functions before unhook and call them - still triggers
+   ADDON_ACTION_FORBIDDEN
+2. Call `self.hooks[C_ChatInfo].SendChatMessage` - hooks table may be nil after unhook
+3. Call `C_ChatInfo.SendChatMessage` directly - this IS the protected function causing the
+   error
+4. Return immediately without calling anything - chat messages are lost
+5. Check `_isPvPDisabled` flag and return - function still in call chain after unhook
+
+**Root Cause Hypothesis**:
+
+- AceHook's `Unhook()` doesn't immediately restore original Blizzard function
+- Our hooked function remains in call chain even after unhooking
+- Any code execution in our function during secure moment triggers ADDON_ACTION_FORBIDDEN
+- The error occurs at line 123 which is likely calling ANY API during taint
+
+**Potential Solutions to Explore**:
+
+1. Don't use AceHook at all in Retail - use manual hooking with direct table manipulation
+2. Use `hooksecurefunc` instead of RawHook (but this prevents modification)
+3. Completely disable addon in PVP via OnDisable/OnEnable lifecycle
+4. Pre-check instance type BEFORE hooking at all during addon initialization
+5. Use PLAYER_ENTERING_BATTLEGROUND event instead of PLAYER_ENTERING_WORLD
+6. Investigate if AceHook has a "force unhook" or "clear all hooks" method
+
+**Testing Notes**:
+
+- Error occurs consistently in battlegrounds and arenas
+- Error happens when ANY chat message is sent while in PVP instance
+- The "Disabled in PVP instance to prevent errors" message prints correctly
+- Unhook appears to execute without errors, but doesn't actually remove the hook
+
 ## Architecture & Dependencies
 
 ### API Separation Architecture
@@ -17,11 +67,16 @@ WoW versions:
   - `SendChatMessage` hook for global `SendChatMessage()` function
   - `OpenConfig()` for Classic-specific config dialog
   - `ClassicHooks()` to set up Classic-specific hooks
+  - **DO NOT MODIFY - ClassicAPI.lua should NEVER be changed unless the user explicitly
+    requests and approves it**
+  - **ClassicAPI works correctly and does not need fixes for Retail-specific issues**
 - **[RetailAPI.lua](../RetailAPI.lua)**: Retail WoW API implementations
   - `SendChatMessage` hook for `C_ChatInfo.SendChatMessage()`
   - `SendMessage` hook for `C_Club.SendMessage()` (community channels)
   - `OpenConfig()` for Retail-specific config dialog
   - `RetailHooks()` to set up Retail-specific hooks
+  - **Most modern WoW issues (battlegrounds, arenas, Midnight API changes) are
+    Retail-only**
 
 - **[IncognitoResurrected.lua](../IncognitoResurrected.lua)**: Shared core functionality
   - Addon initialization, options, localization, profiles
@@ -31,9 +86,14 @@ WoW versions:
 
 **When adding new code:**
 
-- Message sending hooks → Add to ClassicAPI.lua OR RetailAPI.lua depending on API used
-- Display/rendering features → Add to IncognitoResurrected.lua (shared)
-- WoW API function calls → Use `IsRetailAPI()` check or place in appropriate API file
+- Determine if the issue/feature is Retail-specific, Classic-specific, or affects both
+- **Retail-only features** (PvP instances, Secret API, C_ChatInfo, communities): Only
+  modify RetailAPI.lua
+- **Classic-only features**: Only modify ClassicAPI.lua **AND GET USER APPROVAL FIRST**
+- **Shared features** (UI, options, colorization): Modify IncognitoResurrected.lua
+- If you must modify both API files, ensure changes are appropriate for each version
+- **Never blindly copy changes from RetailAPI.lua to ClassicAPI.lua**
+- **When in doubt, DO NOT touch ClassicAPI.lua**
 
 ### Ace3 Framework Foundation
 
