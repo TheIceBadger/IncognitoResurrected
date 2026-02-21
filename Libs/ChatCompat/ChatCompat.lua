@@ -1,5 +1,5 @@
 ---------------------------------------------------------------------
--- ChatCompat.lua  (v4)
+-- ChatCompat.lua  (v5)
 -- Abstraction layer for Retail / Classic Chat APIs
 --
 -- Retail: EditBox pre-hook approach — hooks chat editbox OnKeyDown to
@@ -8,7 +8,7 @@
 --
 -- Classic: Manual table-swap hooks (no taint issues in Classic).
 ---------------------------------------------------------------------
-local MAJOR, MINOR = "ChatCompat", 4
+local MAJOR, MINOR = "ChatCompat", 5
 local ChatCompat = LibStub:NewLibrary(MAJOR, MINOR)
 if not ChatCompat then return end
 
@@ -16,6 +16,8 @@ if not ChatCompat then return end
 -- State Initialization
 ---------------------------------------------------------------------
 ChatCompat._hooks = ChatCompat._hooks or {}
+-- Reset editbox hooks on version upgrade so new hook code is installed
+ChatCompat._hooks.editBoxesHooked = false
 
 ---------------------------------------------------------------------
 -- API Detection
