@@ -174,6 +174,24 @@ function ChatCompat:HookChatEditBoxes(addon)
             if newText and newText ~= text then eb:SetText(newText) end
         end)
 
+        -- Strip prefix when the user browses sent-message history (Up/Down).
+        editBox:HookScript("OnKeyDown", function(eb, key)
+            if key ~= "UP" and key ~= "DOWN" then return end
+            if not addon._prefixEnabled then return end
+            if isModernRetail() and type(GetInstanceInfo) == "function" then
+                local _, instanceType = GetInstanceInfo()
+                if instanceType == "pvp" or instanceType == "arena" then
+                    return
+                end
+            end
+            local text = eb:GetText()
+            if not text or text == "" then return end
+            local prefix = addon:GetNamePrefix()
+            if text:sub(1, #prefix) == prefix then
+                eb:SetText(text:sub(#prefix + 1))
+            end
+        end)
+		
         editBox._chatCompatHooked = true
     end
 
